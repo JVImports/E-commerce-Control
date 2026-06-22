@@ -1,0 +1,534 @@
+Tabela,Coluna,Tipo de Dado,Aceita Nulo
+cash_flow_projection,id,integer,NO
+cash_flow_projection,reference_month,date,YES
+cash_flow_projection,projected_inflow,numeric,YES
+cash_flow_projection,projected_outflow,numeric,YES
+cash_flow_projection,synced_at,timestamp with time zone,YES
+inventory_links,id,integer,NO
+inventory_links,model_id,bigint,YES
+inventory_links,internal_sku,text,YES
+inventory_links,quantity_on_hand,integer,YES
+inventory_links,reserved_quantity,integer,YES
+inventory_links,synced_at,timestamp with time zone,YES
+landed_cost_entries,id,integer,NO
+landed_cost_entries,sku,text,YES
+landed_cost_entries,ii_value,numeric,YES
+landed_cost_entries,ipi_value,numeric,YES
+landed_cost_entries,pis_value,numeric,YES
+landed_cost_entries,cofins_value,numeric,YES
+landed_cost_entries,icms_value,numeric,YES
+landed_cost_entries,afrmm_value,numeric,YES
+landed_cost_entries,landed_cost,numeric,YES
+landed_cost_entries,synced_at,timestamp with time zone,YES
+shopee_ads_balance,data_timestamp,bigint,NO
+shopee_ads_balance,total_balance,numeric,YES
+shopee_ads_balance,snapshot_at,timestamp with time zone,YES
+shopee_ads_balance,synced_at,timestamp with time zone,YES
+shopee_ads_daily_performance,performance_date,date,NO
+shopee_ads_daily_performance,impression,integer,YES
+shopee_ads_daily_performance,clicks,integer,YES
+shopee_ads_daily_performance,ctr,numeric,YES
+shopee_ads_daily_performance,direct_order,integer,YES
+shopee_ads_daily_performance,broad_order,integer,YES
+shopee_ads_daily_performance,direct_conversions,numeric,YES
+shopee_ads_daily_performance,broad_conversions,numeric,YES
+shopee_ads_daily_performance,direct_item_sold,integer,YES
+shopee_ads_daily_performance,broad_item_sold,integer,YES
+shopee_ads_daily_performance,direct_gmv,numeric,YES
+shopee_ads_daily_performance,broad_gmv,numeric,YES
+shopee_ads_daily_performance,expense,numeric,YES
+shopee_ads_daily_performance,cost_per_conversion,numeric,YES
+shopee_ads_daily_performance,direct_roas,numeric,YES
+shopee_ads_daily_performance,broad_roas,numeric,YES
+shopee_ads_daily_performance,synced_at,timestamp with time zone,YES
+shopee_escrow,order_sn,text,NO
+shopee_escrow,buyer_total_amount,numeric,YES
+shopee_escrow,escrow_amount,numeric,YES
+shopee_escrow,final_shipping_fee,numeric,YES
+shopee_escrow,commission_fee,numeric,YES
+shopee_escrow,shopee_discount,numeric,YES
+shopee_escrow,voucher_from_seller,numeric,YES
+shopee_escrow,ship_rebate_from_shopee,numeric,YES
+shopee_escrow,coin,numeric,YES
+shopee_escrow,service_fee,numeric,YES
+shopee_escrow,seller_return_refund,numeric,YES
+shopee_escrow,synced_at,timestamp with time zone,YES
+shopee_income_overview_snapshots,snapshot_at,timestamp with time zone,NO
+shopee_income_overview_snapshots,latest_payout_date,date,YES
+shopee_income_overview_snapshots,pending_amount,numeric,YES
+shopee_income_overview_snapshots,to_release_amount,numeric,YES
+shopee_income_overview_snapshots,released_amount,numeric,YES
+shopee_income_overview_snapshots,synced_at,timestamp with time zone,YES
+shopee_order_items,id,integer,NO
+shopee_order_items,line_key,text,YES
+shopee_order_items,order_sn,text,YES
+shopee_order_items,item_id,bigint,YES
+shopee_order_items,model_id,bigint,YES
+shopee_order_items,item_name,text,YES
+shopee_order_items,model_name,text,YES
+shopee_order_items,quantity,integer,YES
+shopee_order_items,unit_price,numeric,YES
+shopee_orders,order_sn,text,NO
+shopee_orders,status,text,YES
+shopee_orders,buyer_username,text,YES
+shopee_orders,total_amount,numeric,YES
+shopee_orders,payment_method,text,YES
+shopee_orders,items_summary,text,YES
+shopee_orders,shipping_address,text,YES
+shopee_orders,created_at,timestamp with time zone,YES
+shopee_orders,updated_at,timestamp with time zone,YES
+shopee_orders,synced_at,timestamp with time zone,YES
+shopee_products,item_id,bigint,NO
+shopee_products,item_name,text,YES
+shopee_products,item_sku,text,YES
+shopee_products,item_status,text,YES
+shopee_products,category_id,bigint,YES
+shopee_products,has_model,boolean,YES
+shopee_products,weight_g,numeric,YES
+shopee_products,width_cm,numeric,YES
+shopee_products,height_cm,numeric,YES
+shopee_products,length_cm,numeric,YES
+shopee_products,image_url,text,YES
+shopee_products,views,integer,YES
+shopee_products,sales,integer,YES
+shopee_products,likes,integer,YES
+shopee_products,rating_star,numeric,YES
+shopee_products,rating_count,integer,YES
+shopee_products,updated_at,timestamp with time zone,YES
+shopee_products,synced_at,timestamp with time zone,YES
+shopee_products,original_price,numeric,YES
+shopee_products,current_price,numeric,YES
+shopee_products,is_on_promotion,boolean,YES
+shopee_products,discount_amount,numeric,YES
+shopee_products,discount_percent,numeric,YES
+shopee_returns,return_id,bigint,NO
+shopee_returns,order_sn,text,YES
+shopee_returns,status,text,YES
+shopee_returns,reason,text,YES
+shopee_returns,refund_amount,numeric,YES
+shopee_returns,return_type,text,YES
+shopee_returns,buyer_username,text,YES
+shopee_returns,created_at,timestamp with time zone,YES
+shopee_returns,updated_at,timestamp with time zone,YES
+shopee_returns,synced_at,timestamp with time zone,YES
+shopee_variations,model_id,bigint,NO
+shopee_variations,item_id,bigint,YES
+shopee_variations,model_name,text,YES
+shopee_variations,model_sku,text,YES
+shopee_variations,original_price,numeric,YES
+shopee_variations,current_price,numeric,YES
+shopee_variations,stock_available,integer,YES
+shopee_variations,stock_reserved,integer,YES
+shopee_variations,synced_at,timestamp with time zone,YES
+shopee_variations,is_on_promotion,boolean,YES
+shopee_variations,discount_amount,numeric,YES
+shopee_variations,discount_percent,numeric,YES
+shopee_wallet_transactions,transaction_id,bigint,NO
+shopee_wallet_transactions,transaction_type,text,YES
+shopee_wallet_transactions,amount,numeric,YES
+shopee_wallet_transactions,status,text,YES
+shopee_wallet_transactions,order_sn,text,YES
+shopee_wallet_transactions,description,text,YES
+shopee_wallet_transactions,created_at,timestamp with time zone,YES
+shopee_wallet_transactions,synced_at,timestamp with time zone,YES
+shopee_wallet_transactions,current_balance,numeric,YES
+shopee_wallet_transactions,money_flow,text,YES
+shopee_wallet_transactions,withdrawal_type,text,YES
+shopee_wallet_transactions,withdrawal_id,bigint,YES
+shopee_wallet_transactions,root_withdrawal_id,bigint,YES
+shopee_wallet_transactions,transaction_tab_type,text,YES
+suppliers,id,integer,NO
+suppliers,supplier_name,text,YES
+suppliers,supplier_code,text,YES
+suppliers,lead_time_days,integer,YES
+suppliers,moq,integer,YES
+suppliers,synced_at,timestamp with time zone,YES
+sync_log,id,integer,NO
+sync_log,module,text,YES
+sync_log,status,text,YES
+sync_log,message,text,YES
+sync_log,created_at,timestamp with time zone,YES
+sync_state,key,text,NO
+sync_state,value,text,YES
+sync_state,updated_at,timestamp with time zone,YES
+tiktok_orders,order_id,text,NO
+tiktok_orders,raw_payload,jsonb,YES
+tiktok_orders,synced_at,timestamp with time zone,YES
+upseller_catalog_imports,id,bigint,NO
+upseller_catalog_imports,source_folder_name,text,YES
+upseller_catalog_imports,source_folder_path,text,YES
+upseller_catalog_imports,products_file_name,text,NO
+upseller_catalog_imports,products_file_path,text,YES
+upseller_catalog_imports,products_file_hash,text,NO
+upseller_catalog_imports,kits_file_name,text,YES
+upseller_catalog_imports,kits_file_path,text,YES
+upseller_catalog_imports,kits_file_hash,text,YES
+upseller_catalog_imports,products_modified_at,timestamp with time zone,YES
+upseller_catalog_imports,kits_modified_at,timestamp with time zone,YES
+upseller_catalog_imports,product_sku_count,integer,YES
+upseller_catalog_imports,kit_sku_count,integer,YES
+upseller_catalog_imports,component_row_count,integer,YES
+upseller_catalog_imports,imported_at,timestamp with time zone,NO
+upseller_kit_snapshot,id,bigint,NO
+upseller_kit_snapshot,import_id,bigint,NO
+upseller_kit_snapshot,kit_sku,text,NO
+upseller_kit_snapshot,kit_title,text,YES
+upseller_kit_snapshot,product_alias,text,YES
+upseller_kit_snapshot,use_alias_on_invoice,boolean,YES
+upseller_kit_snapshot,categories,text,YES
+upseller_kit_snapshot,is_active,boolean,YES
+upseller_kit_snapshot,image_url,text,YES
+upseller_kit_snapshot,component_sku,text,NO
+upseller_kit_snapshot,component_qty,numeric,NO
+upseller_kit_snapshot,source_sheet,text,YES
+upseller_kit_snapshot,source_row_number,integer,YES
+upseller_kit_snapshot,imported_at,timestamp with time zone,NO
+upseller_product_snapshot,id,bigint,NO
+upseller_product_snapshot,import_id,bigint,NO
+upseller_product_snapshot,sku,text,NO
+upseller_product_snapshot,spu,text,YES
+upseller_product_snapshot,product_code,text,YES
+upseller_product_snapshot,product_title,text,YES
+upseller_product_snapshot,product_alias,text,YES
+upseller_product_snapshot,use_alias_on_invoice,boolean,YES
+upseller_product_snapshot,categories,text,YES
+upseller_product_snapshot,variant_name_1,text,YES
+upseller_product_snapshot,variant_value_1,text,YES
+upseller_product_snapshot,variant_name_2,text,YES
+upseller_product_snapshot,variant_value_2,text,YES
+upseller_product_snapshot,variant_name_3,text,YES
+upseller_product_snapshot,variant_value_3,text,YES
+upseller_product_snapshot,variant_name_4,text,YES
+upseller_product_snapshot,variant_value_4,text,YES
+upseller_product_snapshot,variant_name_5,text,YES
+upseller_product_snapshot,variant_value_5,text,YES
+upseller_product_snapshot,launch_date,date,YES
+upseller_product_snapshot,is_active,boolean,YES
+upseller_product_snapshot,seller_name,text,YES
+upseller_product_snapshot,retail_price,numeric,YES
+upseller_product_snapshot,purchase_cost,numeric,YES
+upseller_product_snapshot,image_url,text,YES
+upseller_product_snapshot,sku_alias,text,YES
+upseller_product_snapshot,source_sheet,text,YES
+upseller_product_snapshot,source_row_number,integer,YES
+upseller_product_snapshot,imported_at,timestamp with time zone,NO
+upseller_stock_imports,id,bigint,NO
+upseller_stock_imports,source_file_name,text,NO
+upseller_stock_imports,source_file_path,text,YES
+upseller_stock_imports,file_hash,text,NO
+upseller_stock_imports,source_modified_at,timestamp with time zone,YES
+upseller_stock_imports,source_sheet_count,integer,YES
+upseller_stock_imports,sku_count,integer,YES
+upseller_stock_imports,imported_at,timestamp with time zone,NO
+upseller_stock_settings,sku,text,NO
+upseller_stock_settings,replenish_enabled,boolean,NO
+upseller_stock_settings,current_stock_qty,integer,NO
+upseller_stock_settings,target_coverage_days,integer,YES
+upseller_stock_settings,supplier_lead_time_days,integer,YES
+upseller_stock_settings,manual_notes,text,YES
+upseller_stock_settings,updated_at,timestamp with time zone,NO
+upseller_stock_snapshot,id,bigint,NO
+upseller_stock_snapshot,import_id,bigint,NO
+upseller_stock_snapshot,sku,text,NO
+upseller_stock_snapshot,source_sheet,text,YES
+upseller_stock_snapshot,source_row_number,integer,YES
+upseller_stock_snapshot,imported_at,timestamp with time zone,NO
+upseller_stock_snapshot,product_title,text,YES
+upseller_stock_snapshot,warehouse_name,text,YES
+upseller_stock_snapshot,shelf_name,text,YES
+upseller_stock_snapshot,low_stock_qty,numeric,YES
+upseller_stock_snapshot,in_transit_purchase_qty,numeric,YES
+upseller_stock_snapshot,in_transit_transfer_qty,numeric,YES
+upseller_stock_snapshot,occupied_qty,numeric,YES
+upseller_stock_snapshot,available_qty,numeric,YES
+upseller_stock_snapshot,current_stock_qty,numeric,YES
+upseller_stock_snapshot,average_cost,numeric,YES
+upseller_stock_snapshot,subtotal_cost,numeric,YES
+vw_ads_daily,performance_date,date,YES
+vw_ads_daily,impression,integer,YES
+vw_ads_daily,clicks,integer,YES
+vw_ads_daily,expense,numeric,YES
+vw_ads_daily,direct_gmv,numeric,YES
+vw_ads_daily,broad_gmv,numeric,YES
+vw_ads_daily,direct_roas,numeric,YES
+vw_ads_daily,broad_roas,numeric,YES
+vw_ads_daily,synced_at,timestamp with time zone,YES
+vw_ads_summary,latest_total_balance,numeric,YES
+vw_ads_summary,latest_balance_at,timestamp with time zone,YES
+vw_ads_summary,daily_rows,integer,YES
+vw_ads_summary,total_expense,numeric,YES
+vw_ads_summary,total_direct_gmv,numeric,YES
+vw_ads_summary,total_broad_gmv,numeric,YES
+vw_ads_summary,avg_direct_roas,numeric,YES
+vw_ads_summary,avg_broad_roas,numeric,YES
+vw_ads_summary,generated_at,timestamp with time zone,YES
+vw_catalog_summary,total_products,integer,YES
+vw_catalog_summary,with_variations,integer,YES
+vw_catalog_summary,without_variations,integer,YES
+vw_catalog_summary,total_views,bigint,YES
+vw_catalog_summary,total_sales,bigint,YES
+vw_catalog_summary,total_likes,bigint,YES
+vw_catalog_summary,avg_rating_star,numeric,YES
+vw_catalog_summary,last_catalog_sync,timestamp with time zone,YES
+vw_financial_daily,reference_date,date,YES
+vw_financial_daily,escrow_amount,numeric,YES
+vw_financial_daily,commission_fee,numeric,YES
+vw_financial_daily,service_fee,numeric,YES
+vw_financial_daily,wallet_transactions_count,integer,YES
+vw_financial_daily,wallet_amount,numeric,YES
+vw_financial_daily,wallet_in_amount,numeric,YES
+vw_financial_daily,wallet_out_amount,numeric,YES
+vw_financial_daily,withdrawal_completed_amount,numeric,YES
+vw_financial_daily,returns_count,integer,YES
+vw_financial_daily,refund_amount,numeric,YES
+vw_financial_daily,ads_expense,numeric,YES
+vw_financial_daily,ads_direct_gmv,numeric,YES
+vw_financial_daily,ads_broad_gmv,numeric,YES
+vw_financial_summary,total_escrow_amount,numeric,YES
+vw_financial_summary,total_commission_fee,numeric,YES
+vw_financial_summary,total_service_fee,numeric,YES
+vw_financial_summary,total_wallet_amount,numeric,YES
+vw_financial_summary,total_wallet_money_in,numeric,YES
+vw_financial_summary,total_wallet_money_out,numeric,YES
+vw_financial_summary,total_withdrawn_amount,numeric,YES
+vw_financial_summary,total_withdrawal_requested_amount,numeric,YES
+vw_financial_summary,total_refund_amount,numeric,YES
+vw_financial_summary,total_ads_expense,numeric,YES
+vw_financial_summary,latest_ads_balance,numeric,YES
+vw_financial_summary,latest_income_snapshot_at,timestamp with time zone,YES
+vw_financial_summary,processing_amount,numeric,YES
+vw_financial_summary,to_release_amount,numeric,YES
+vw_financial_summary,released_amount,numeric,YES
+vw_financial_summary,latest_payout_date,date,YES
+vw_financial_summary,latest_wallet_balance,numeric,YES
+vw_financial_summary,latest_wallet_balance_at,timestamp with time zone,YES
+vw_financial_summary,generated_at,timestamp with time zone,YES
+vw_orders_daily,order_date,date,YES
+vw_orders_daily,orders_count,integer,YES
+vw_orders_daily,gross_amount,numeric,YES
+vw_orders_daily_status,order_date,date,YES
+vw_orders_daily_status,status,text,YES
+vw_orders_daily_status,orders_count,integer,YES
+vw_orders_daily_status,gross_amount,numeric,YES
+vw_orders_monthly,reference_month,date,YES
+vw_orders_monthly,orders_count,integer,YES
+vw_orders_monthly,gross_amount,numeric,YES
+vw_orders_monthly,avg_order_value,numeric,YES
+vw_orders_status_summary,status,text,YES
+vw_orders_status_summary,orders_count,integer,YES
+vw_orders_status_summary,gross_amount,numeric,YES
+vw_orders_status_summary,first_order_at,timestamp with time zone,YES
+vw_orders_status_summary,last_order_at,timestamp with time zone,YES
+vw_product_performance_daily,order_date,date,YES
+vw_product_performance_daily,item_id,bigint,YES
+vw_product_performance_daily,item_name,text,YES
+vw_product_performance_daily,model_id,bigint,YES
+vw_product_performance_daily,model_name,text,YES
+vw_product_performance_daily,orders_count,integer,YES
+vw_product_performance_daily,units_sold,bigint,YES
+vw_product_performance_daily,gross_revenue,numeric,YES
+vw_product_performance_summary,item_id,bigint,YES
+vw_product_performance_summary,item_name,text,YES
+vw_product_performance_summary,item_sku,text,YES
+vw_product_performance_summary,item_status,text,YES
+vw_product_performance_summary,has_model,boolean,YES
+vw_product_performance_summary,current_price,numeric,YES
+vw_product_performance_summary,original_price,numeric,YES
+vw_product_performance_summary,is_on_promotion,boolean,YES
+vw_product_performance_summary,discount_amount,numeric,YES
+vw_product_performance_summary,discount_percent,numeric,YES
+vw_product_performance_summary,views,integer,YES
+vw_product_performance_summary,likes,integer,YES
+vw_product_performance_summary,catalog_sales,integer,YES
+vw_product_performance_summary,orders_count,integer,YES
+vw_product_performance_summary,units_sold,bigint,YES
+vw_product_performance_summary,gross_revenue,numeric,YES
+vw_product_performance_summary,views_to_orders_rate_pct,numeric,YES
+vw_product_performance_summary,views_to_units_rate_pct,numeric,YES
+vw_product_performance_summary,first_order_at,timestamp with time zone,YES
+vw_product_performance_summary,last_order_at,timestamp with time zone,YES
+vw_product_performance_summary,synced_at,timestamp with time zone,YES
+vw_returns_daily,return_date,date,YES
+vw_returns_daily,returns_count,integer,YES
+vw_returns_daily,refund_amount,numeric,YES
+vw_sales_daily,sales_date,date,YES
+vw_sales_daily,orders_count,integer,YES
+vw_sales_daily,units_sold,bigint,YES
+vw_sales_daily,gross_revenue,numeric,YES
+vw_sales_monthly,reference_month,date,YES
+vw_sales_monthly,orders_count,integer,YES
+vw_sales_monthly,units_sold,bigint,YES
+vw_sales_monthly,gross_revenue,numeric,YES
+vw_sales_monthly,avg_order_value,numeric,YES
+vw_sync_health,total_products,bigint,YES
+vw_sync_health,products_with_variations,bigint,YES
+vw_sync_health,total_variations,bigint,YES
+vw_sync_health,total_orders,bigint,YES
+vw_sync_health,total_order_items,bigint,YES
+vw_sync_health,total_escrow_rows,bigint,YES
+vw_sync_health,total_wallet_transactions,bigint,YES
+vw_sync_health,total_returns,bigint,YES
+vw_sync_health,total_ads_balance_snapshots,bigint,YES
+vw_sync_health,total_ads_daily_rows,bigint,YES
+vw_sync_health,generated_at,timestamp with time zone,YES
+vw_sync_latest_status,module,text,YES
+vw_sync_latest_status,status,text,YES
+vw_sync_latest_status,message,text,YES
+vw_sync_latest_status,created_at,timestamp with time zone,YES
+vw_sync_state_dashboard,key,text,YES
+vw_sync_state_dashboard,value,text,YES
+vw_sync_state_dashboard,updated_at,timestamp with time zone,YES
+vw_top_products,item_id,bigint,YES
+vw_top_products,item_name,text,YES
+vw_top_products,item_sku,text,YES
+vw_top_products,item_status,text,YES
+vw_top_products,has_model,boolean,YES
+vw_top_products,views,integer,YES
+vw_top_products,sales,integer,YES
+vw_top_products,likes,integer,YES
+vw_top_products,rating_star,numeric,YES
+vw_top_products,rating_count,integer,YES
+vw_top_products,synced_at,timestamp with time zone,YES
+vw_upseller_catalog_latest_import,import_id,bigint,YES
+vw_upseller_catalog_latest_import,source_folder_name,text,YES
+vw_upseller_catalog_latest_import,source_folder_path,text,YES
+vw_upseller_catalog_latest_import,products_file_name,text,YES
+vw_upseller_catalog_latest_import,products_file_path,text,YES
+vw_upseller_catalog_latest_import,products_modified_at,timestamp with time zone,YES
+vw_upseller_catalog_latest_import,kits_file_name,text,YES
+vw_upseller_catalog_latest_import,kits_file_path,text,YES
+vw_upseller_catalog_latest_import,kits_modified_at,timestamp with time zone,YES
+vw_upseller_catalog_latest_import,product_sku_count,integer,YES
+vw_upseller_catalog_latest_import,kit_sku_count,integer,YES
+vw_upseller_catalog_latest_import,component_row_count,integer,YES
+vw_upseller_catalog_latest_import,imported_at,timestamp with time zone,YES
+vw_upseller_kit_components_latest,id,bigint,YES
+vw_upseller_kit_components_latest,import_id,bigint,YES
+vw_upseller_kit_components_latest,kit_sku,text,YES
+vw_upseller_kit_components_latest,kit_title,text,YES
+vw_upseller_kit_components_latest,product_alias,text,YES
+vw_upseller_kit_components_latest,use_alias_on_invoice,boolean,YES
+vw_upseller_kit_components_latest,categories,text,YES
+vw_upseller_kit_components_latest,is_active,boolean,YES
+vw_upseller_kit_components_latest,image_url,text,YES
+vw_upseller_kit_components_latest,component_sku,text,YES
+vw_upseller_kit_components_latest,component_qty,numeric,YES
+vw_upseller_kit_components_latest,source_sheet,text,YES
+vw_upseller_kit_components_latest,source_row_number,integer,YES
+vw_upseller_kit_components_latest,imported_at,timestamp with time zone,YES
+vw_upseller_products_latest,id,bigint,YES
+vw_upseller_products_latest,import_id,bigint,YES
+vw_upseller_products_latest,sku,text,YES
+vw_upseller_products_latest,spu,text,YES
+vw_upseller_products_latest,product_code,text,YES
+vw_upseller_products_latest,product_title,text,YES
+vw_upseller_products_latest,product_alias,text,YES
+vw_upseller_products_latest,use_alias_on_invoice,boolean,YES
+vw_upseller_products_latest,categories,text,YES
+vw_upseller_products_latest,variant_name_1,text,YES
+vw_upseller_products_latest,variant_value_1,text,YES
+vw_upseller_products_latest,variant_name_2,text,YES
+vw_upseller_products_latest,variant_value_2,text,YES
+vw_upseller_products_latest,variant_name_3,text,YES
+vw_upseller_products_latest,variant_value_3,text,YES
+vw_upseller_products_latest,variant_name_4,text,YES
+vw_upseller_products_latest,variant_value_4,text,YES
+vw_upseller_products_latest,variant_name_5,text,YES
+vw_upseller_products_latest,variant_value_5,text,YES
+vw_upseller_products_latest,launch_date,date,YES
+vw_upseller_products_latest,is_active,boolean,YES
+vw_upseller_products_latest,seller_name,text,YES
+vw_upseller_products_latest,retail_price,numeric,YES
+vw_upseller_products_latest,purchase_cost,numeric,YES
+vw_upseller_products_latest,image_url,text,YES
+vw_upseller_products_latest,sku_alias,text,YES
+vw_upseller_products_latest,source_sheet,text,YES
+vw_upseller_products_latest,source_row_number,integer,YES
+vw_upseller_products_latest,imported_at,timestamp with time zone,YES
+vw_upseller_sku_daily_demand,order_date,date,YES
+vw_upseller_sku_daily_demand,sku,text,YES
+vw_upseller_sku_daily_demand,orders_count,integer,YES
+vw_upseller_sku_daily_demand,direct_units_sold,numeric,YES
+vw_upseller_sku_daily_demand,kit_component_units_sold,numeric,YES
+vw_upseller_sku_daily_demand,total_units_sold,numeric,YES
+vw_upseller_stock_latest,import_id,bigint,YES
+vw_upseller_stock_latest,sku,text,YES
+vw_upseller_stock_latest,product_title,text,YES
+vw_upseller_stock_latest,warehouse_name,text,YES
+vw_upseller_stock_latest,shelf_name,text,YES
+vw_upseller_stock_latest,low_stock_qty,numeric,YES
+vw_upseller_stock_latest,in_transit_purchase_qty,numeric,YES
+vw_upseller_stock_latest,in_transit_transfer_qty,numeric,YES
+vw_upseller_stock_latest,occupied_qty,numeric,YES
+vw_upseller_stock_latest,available_qty,numeric,YES
+vw_upseller_stock_latest,current_stock_qty,numeric,YES
+vw_upseller_stock_latest,average_cost,numeric,YES
+vw_upseller_stock_latest,subtotal_cost,numeric,YES
+vw_upseller_stock_latest,source_sheet,text,YES
+vw_upseller_stock_latest,source_row_number,integer,YES
+vw_upseller_stock_latest,source_file_name,text,YES
+vw_upseller_stock_latest,source_file_path,text,YES
+vw_upseller_stock_latest,source_modified_at,timestamp with time zone,YES
+vw_upseller_stock_latest,imported_at,timestamp with time zone,YES
+vw_upseller_stock_latest_import,import_id,bigint,YES
+vw_upseller_stock_latest_import,source_file_name,text,YES
+vw_upseller_stock_latest_import,source_file_path,text,YES
+vw_upseller_stock_latest_import,source_modified_at,timestamp with time zone,YES
+vw_upseller_stock_latest_import,source_sheet_count,integer,YES
+vw_upseller_stock_latest_import,sku_count,integer,YES
+vw_upseller_stock_latest_import,imported_at,timestamp with time zone,YES
+vw_upseller_stock_planning,sku,text,YES
+vw_upseller_stock_planning,source_file_name,text,YES
+vw_upseller_stock_planning,source_modified_at,timestamp with time zone,YES
+vw_upseller_stock_planning,stock_imported_at,timestamp with time zone,YES
+vw_upseller_stock_planning,product_title,text,YES
+vw_upseller_stock_planning,warehouse_name,text,YES
+vw_upseller_stock_planning,shelf_name,text,YES
+vw_upseller_stock_planning,low_stock_qty,numeric,YES
+vw_upseller_stock_planning,in_transit_purchase_qty,numeric,YES
+vw_upseller_stock_planning,in_transit_transfer_qty,numeric,YES
+vw_upseller_stock_planning,occupied_qty,numeric,YES
+vw_upseller_stock_planning,available_qty,numeric,YES
+vw_upseller_stock_planning,reported_stock_qty,numeric,YES
+vw_upseller_stock_planning,average_cost,numeric,YES
+vw_upseller_stock_planning,subtotal_cost,numeric,YES
+vw_upseller_stock_planning,item_id,bigint,YES
+vw_upseller_stock_planning,item_name,text,YES
+vw_upseller_stock_planning,model_id,bigint,YES
+vw_upseller_stock_planning,model_name,text,YES
+vw_upseller_stock_planning,match_type,text,YES
+vw_upseller_stock_planning,current_price,numeric,YES
+vw_upseller_stock_planning,original_price,numeric,YES
+vw_upseller_stock_planning,replenish_enabled,boolean,YES
+vw_upseller_stock_planning,target_coverage_days,integer,YES
+vw_upseller_stock_planning,supplier_lead_time_days,integer,YES
+vw_upseller_stock_planning,manual_notes,text,YES
+vw_upseller_stock_planning,active_days_30d,integer,YES
+vw_upseller_stock_planning,orders_count_30d,integer,YES
+vw_upseller_stock_planning,direct_units_sold_30d,numeric,YES
+vw_upseller_stock_planning,kit_component_units_sold_30d,numeric,YES
+vw_upseller_stock_planning,units_sold_30d,numeric,YES
+vw_upseller_stock_planning,avg_daily_units_30d,numeric,YES
+vw_upseller_stock_planning,coverage_days,numeric,YES
+vw_upseller_stock_planning,suggested_purchase_qty,integer,YES
+vw_upseller_stock_planning,needs_replenishment,boolean,YES
+vw_upseller_stock_planning,critical_sort_value,numeric,YES
+vw_upseller_stock_summary,import_id,bigint,YES
+vw_upseller_stock_summary,source_file_name,text,YES
+vw_upseller_stock_summary,source_modified_at,timestamp with time zone,YES
+vw_upseller_stock_summary,imported_at,timestamp with time zone,YES
+vw_upseller_stock_summary,sku_count,integer,YES
+vw_upseller_stock_summary,planning_rows,integer,YES
+vw_upseller_stock_summary,monitored_rows,integer,YES
+vw_upseller_stock_summary,critical_rows,integer,YES
+vw_upseller_stock_summary,unmatched_rows,integer,YES
+vw_upseller_stock_summary,rows_with_stock_qty,integer,YES
+vw_upseller_stock_summary,total_reported_stock_qty,numeric,YES
+vw_wallet_balance_latest,transaction_id,bigint,YES
+vw_wallet_balance_latest,transaction_type,text,YES
+vw_wallet_balance_latest,status,text,YES
+vw_wallet_balance_latest,current_balance,numeric,YES
+vw_wallet_balance_latest,balance_snapshot_at,timestamp with time zone,YES
+vw_wallet_daily,txn_date,date,YES
+vw_wallet_daily,transactions_count,integer,YES
+vw_wallet_daily,net_amount,numeric,YES
