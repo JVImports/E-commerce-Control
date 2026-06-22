@@ -10,6 +10,8 @@ let financialDailyData = [];
 let landedCostEntriesData = [];
 let skuDailyDemandData = [];
 let selectedPeriod = '30';
+let selectedShop = 'all'; // active shop filter
+let userShops = [];       // user's connected shops list
 let catalogSummaryData = null;
 let adsSummaryData = null;
 let productPerformanceData = [];
@@ -55,12 +57,26 @@ window.addEventListener('DOMContentLoaded', async () => {
   } else {
     initSupabase();
     
+    // Check URL parameters for Shopee OAuth code redirection
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const shopId = urlParams.get('shop_id');
+    
     // Check session
     try {
       const { data: { session }, error } = await supabaseClient.auth.getSession();
       if (!error && session) {
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-container').style.display = 'flex';
+        
+        // Fetch user shops first
+        await fetchUserShops();
+        
+        // Handle OAuth connection if present in URL
+        if (code && shopId) {
+          await handleOAuthRedirect(code, shopId);
+        }
+        
         await loadAllData();
         switchView('dashboard');
       } else {
@@ -272,6 +288,9 @@ async function loadAllData() {
   
   console.log("Iniciando carregamento modular de dados do Supabase...");
 
+  const isFiltered = selectedShop !== 'all';
+  const shopNum = Number(selectedShop);
+
   // 1. Fetch S&OP stock planning view
   try {
     const { data: stockPlanning, error: stockError } = await supabaseClient
@@ -297,9 +316,11 @@ async function loadAllData() {
   
   // 2. Fetch Shopee products
   try {
-    const { data: shopeeProducts, error: prodError } = await supabaseClient
-      .from('shopee_products')
-      .select('*');
+    let query = supabaseClient.from('shopee_products').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data: shopeeProducts, error: prodError } = await query;
       
     if (prodError) throw prodError;
     shopeeProductsData = shopeeProducts || [];
@@ -320,13 +341,36 @@ async function loadAllData() {
   
   // 3. Fetch Financial Summary view
   try {
-    const { data: finSummary, error: finSumError } = await supabaseClient
-      .from('vw_financial_summary')
-      .select('*')
-      .maybeSingle();
+    let query = supabaseClient.from('vw_financial_summary').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data: finSummary, error: finSumError } = await query;
       
     if (finSumError) throw finSumError;
-    financialSummaryData = finSummary;
+    
+    // Consolidate Financial Summary view
+    if (finSummary && finSummary.length > 0) {
+      if (selectedShop === 'all') {
+        financialSummaryData = {
+          total_escrow_amount: finSummary.reduce((sum, f) => sum + Number(f.total_escrow_amount || 0), 0),
+          total_commission_fee: finSummary.reduce((sum, f) => sum + Number(f.total_commission_fee || 0), 0),
+          total_service_fee: finSummary.reduce((sum, f) => sum + Number(f.total_service_fee || 0), 0),
+          total_wallet_amount: finSummary.reduce((sum, f) => sum + Number(f.total_wallet_amount || 0), 0),
+          total_refund_amount: finSummary.reduce((sum, f) => sum + Number(f.total_refund_amount || 0), 0),
+          total_ads_expense: finSummary.reduce((sum, f) => sum + Number(f.total_ads_expense || 0), 0),
+          latest_ads_balance: finSummary.reduce((sum, f) => sum + Number(f.latest_ads_balance || 0), 0),
+          processing_amount: finSummary.reduce((sum, f) => sum + Number(f.processing_amount || 0), 0),
+          to_release_amount: finSummary.reduce((sum, f) => sum + Number(f.to_release_amount || 0), 0),
+          released_amount: finSummary.reduce((sum, f) => sum + Number(f.released_amount || 0), 0),
+          latest_wallet_balance: finSummary.reduce((sum, f) => sum + Number(f.latest_wallet_balance || 0), 0)
+        };
+      } else {
+        financialSummaryData = finSummary[0] || null;
+      }
+    } else {
+      financialSummaryData = null;
+    }
     populateFinancialTable();
   } catch (err) {
     console.error("Erro ao carregar sumário financeiro:", err);
@@ -334,9 +378,11 @@ async function loadAllData() {
 
   // 4. Fetch Financial Daily view
   try {
-    const { data: finDaily, error: finDailyError } = await supabaseClient
-      .from('vw_financial_daily')
-      .select('*')
+    let query = supabaseClient.from('vw_financial_daily').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data: finDaily, error: finDailyError } = await query
       .order('reference_date', { ascending: true })
       .limit(365);
       
@@ -358,9 +404,11 @@ async function loadAllData() {
 
   // Fetch vw_upseller_sku_daily_demand
   try {
-    const { data: demand, error: demError } = await supabaseClient
-      .from('vw_upseller_sku_daily_demand')
-      .select('*')
+    let query = supabaseClient.from('vw_upseller_sku_daily_demand').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data: demand, error: demError } = await query
       .order('order_date', { ascending: true });
     if (!demError) skuDailyDemandData = demand || [];
   } catch (e) {
@@ -369,23 +417,79 @@ async function loadAllData() {
 
   // Fetch novas views (Catalog, Ads, Performance)
   try {
-    const { data, error } = await supabaseClient.from('vw_catalog_summary').select('*').maybeSingle();
-    if (!error) catalogSummaryData = data;
+    let query = supabaseClient.from('vw_catalog_summary').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      if (selectedShop === 'all') {
+        catalogSummaryData = {
+          total_products: data.reduce((sum, c) => sum + Number(c.total_products || 0), 0),
+          total_active: data.reduce((sum, c) => sum + Number(c.total_products || c.total_active || 0), 0),
+          total_views: data.reduce((sum, c) => sum + Number(c.total_views || 0), 0),
+          total_sales: data.reduce((sum, c) => sum + Number(c.total_sales || 0), 0),
+          total_likes: data.reduce((sum, c) => sum + Number(c.total_likes || 0), 0),
+          avg_rating_star: data.length > 0 ? (data.reduce((sum, c) => sum + Number(c.avg_rating_star || 0), 0) / data.length).toFixed(2) : 0
+        };
+      } else {
+        catalogSummaryData = data[0] || null;
+      }
+    } else {
+      catalogSummaryData = null;
+    }
   } catch (e) {}
 
   try {
-    const { data, error } = await supabaseClient.from('vw_ads_summary').select('*').maybeSingle();
-    if (!error) adsSummaryData = data;
+    let query = supabaseClient.from('vw_ads_summary').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      if (selectedShop === 'all') {
+        adsSummaryData = {
+          latest_total_balance: data.reduce((sum, a) => sum + Number(a.latest_total_balance || 0), 0),
+          total_expense: data.reduce((sum, a) => sum + Number(a.total_expense || 0), 0),
+          total_direct_gmv: data.reduce((sum, a) => sum + Number(a.total_direct_gmv || 0), 0),
+          total_broad_gmv: data.reduce((sum, a) => sum + Number(a.total_broad_gmv || 0), 0),
+          avg_direct_roas: data.reduce((sum, a) => sum + Number(a.total_expense || 0), 0) > 0 
+            ? (data.reduce((sum, a) => sum + Number(a.total_direct_gmv || 0), 0) / data.reduce((sum, a) => sum + Number(a.total_expense || 0), 0)).toFixed(2)
+            : 0
+        };
+      } else {
+        adsSummaryData = data[0] || null;
+      }
+    } else {
+      adsSummaryData = null;
+    }
   } catch (e) {}
 
   try {
-    const { data, error } = await supabaseClient.from('vw_product_performance_summary').select('*');
+    let query = supabaseClient.from('vw_product_performance_summary').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data, error } = await query;
     if (!error) productPerformanceData = data || [];
   } catch (e) {}
 
   try {
-    const { data, error } = await supabaseClient.from('vw_wallet_balance_latest').select('*').maybeSingle();
-    if (!error) walletData = data;
+    let query = supabaseClient.from('vw_wallet_balance_latest').select('*');
+    if (isFiltered) {
+      query = query.eq('shop_id', shopNum);
+    }
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      if (selectedShop === 'all') {
+        const totalBalance = data.reduce((sum, w) => sum + Number(w.current_balance || w.available_amount || 0), 0);
+        walletData = { current_balance: totalBalance, available_amount: totalBalance };
+      } else {
+        walletData = data[0] || null;
+      }
+    } else {
+      walletData = null;
+    }
   } catch (e) {}
 
   // Render and build general UI widgets
@@ -511,6 +615,32 @@ function getAggregatedMetrics() {
   const netMargin = grossRevenue > 0 ? ((netProfit / grossRevenue) * 100).toFixed(1) : '0.0';
   const avgRoas = totalAds > 0 ? (totalAdsGmv / totalAds).toFixed(2) : '0.00';
   
+  // Group and sum daily metrics by date for chart rendering
+  const dailyMap = {};
+  filteredDaily.forEach(item => {
+    const d = item.reference_date;
+    if (!dailyMap[d]) {
+      dailyMap[d] = {
+        reference_date: d,
+        escrow_amount: 0,
+        commission_fee: 0,
+        service_fee: 0,
+        refund_amount: 0,
+        ads_expense: 0,
+        ads_direct_gmv: 0,
+        wallet_amount: 0
+      };
+    }
+    dailyMap[d].escrow_amount += Number(item.escrow_amount || 0);
+    dailyMap[d].commission_fee += Number(item.commission_fee || 0);
+    dailyMap[d].service_fee += Number(item.service_fee || 0);
+    dailyMap[d].refund_amount += Number(item.refund_amount || 0);
+    dailyMap[d].ads_expense += Number(item.ads_expense || 0);
+    dailyMap[d].ads_direct_gmv += Number(item.ads_direct_gmv || 0);
+    dailyMap[d].wallet_amount += Number(item.wallet_amount || item.escrow_amount || 0);
+  });
+  const consolidatedDaily = Object.values(dailyMap).sort((a, b) => a.reference_date.localeCompare(b.reference_date));
+
   return {
     totalEscrow,
     totalComm,
@@ -522,7 +652,7 @@ function getAggregatedMetrics() {
     netProfit,
     netMargin,
     avgRoas,
-    filteredDaily
+    filteredDaily: consolidatedDaily
   };
 }
 
@@ -695,7 +825,14 @@ function populateStockPlanningTable() {
   const tbody = document.getElementById('stock-planning-tbody');
   tbody.innerHTML = '';
   
-  if (stockPlanningData.length === 0) {
+  const displayData = selectedShop === 'all' 
+    ? stockPlanningData 
+    : stockPlanningData.filter(item => {
+        const prod = shopeeProductsData.find(p => String(p.item_id) === String(item.item_id));
+        return prod && String(prod.shop_id) === String(selectedShop);
+      });
+
+  if (displayData.length === 0) {
     tbody.innerHTML = `
       <tr>
         <td colspan="7" class="empty-placeholder">Nenhum registro de estoque encontrado no Supabase.</td>
@@ -704,7 +841,7 @@ function populateStockPlanningTable() {
     return;
   }
   
-  stockPlanningData.forEach(item => {
+  displayData.forEach(item => {
     const stock = Math.round(Number(item.reported_stock_qty || item.available_qty || 0));
     const vmd = Number(item.avg_daily_units_30d || 0).toFixed(2);
     const coverage = item.coverage_days ? Math.round(Number(item.coverage_days)) : '∞';
@@ -784,13 +921,19 @@ function populateListingsTable() {
       optimizations.push("Excelente! Nenhuma falha.");
     }
     
+    const shop = userShops.find(s => String(s.shop_id) === String(item.shop_id));
+    const shopLabel = shop ? `<span style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background-color: rgba(139, 92, 246, 0.15); color: #a78bfa; margin-left: 6px; font-weight: 500;">${escapeHTML(shop.shop_name)}</span>` : '';
+    
     const row = document.createElement('tr');
     row.setAttribute('onclick', `openProductOptimizer('${item.item_id}')`);
     row.style.cursor = 'pointer';
     row.innerHTML = `
       <td><img src="${escapeHTML(item.image_url || 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=80&auto=format&fit=crop&q=60')}" style="width: 44px; height: 44px; border-radius: 8px; object-fit: cover; border: 1px solid hsl(var(--border-color));" alt="Capa"></td>
       <td>
-        <div style="font-weight: 600; color: white;">${escapeHTML(item.item_sku || 'Sem SKU')}</div>
+        <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+          <span style="font-weight: 600; color: white;">${escapeHTML(item.item_sku || 'Sem SKU')}</span>
+          ${shopLabel}
+        </div>
         <div style="font-size: 0.75rem; color: hsl(var(--text-secondary)); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHTML(item.item_name)}</div>
       </td>
       <td style="text-align: right;">${views}</td>
@@ -801,6 +944,8 @@ function populateListingsTable() {
     `;
     tbody.appendChild(row);
   });
+  
+  lucide.createIcons();
 }
 
 // Populate Financial table (DRE view)
@@ -1320,65 +1465,386 @@ async function initShopeeSync() {
   
   await fetchSyncHealth();
   await fetchSyncLogsAndModules();
-  await loadShopeeCredentials();
+  await fetchUserShops();
 }
 
-async function loadShopeeCredentials() {
+async function fetchUserShops() {
   if (!supabaseClient) return;
+  
+  const shopSelect = document.getElementById('select-shop');
+  if (!shopSelect) return;
+  
   try {
-    const { data, error } = await supabaseClient
-      .from('sync_state')
-      .select('key, value');
+    const session = (await supabaseClient.auth.getSession()).data.session;
+    const token = session ? session.access_token : '';
     
-    if (!error && data) {
-      data.forEach(item => {
-        if (item.key === 'shop_id') {
-          document.getElementById('shopee-shop-id').value = item.value || '';
-        } else if (item.key === 'access_token') {
-          document.getElementById('shopee-access-token').value = item.value || '';
-        } else if (item.key === 'refresh_token') {
-          document.getElementById('shopee-refresh-token').value = item.value || '';
+    if (edgeFunctionUrl && token) {
+      const res = await fetch(edgeFunctionUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
         }
       });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok) {
+          userShops = data.shops || [];
+          window.shopeeOauthUrl = data.oauthUrl || ""; // cache oauth URL globally
+        }
+      }
     }
+    
+    // Fallback if edge function fetch failed or returned empty
+    if (userShops.length === 0) {
+      const { data, error } = await supabaseClient
+        .from('shopee_shops')
+        .select('shop_id, shop_name, updated_at')
+        .order('shop_name', { ascending: true });
+      if (!error && data) {
+        userShops = data;
+      }
+    }
+    
+    // Update shop selector dropdown
+    const currentVal = selectedShop;
+    shopSelect.innerHTML = '<option value="all">Todas as Lojas (Consolidado)</option>';
+    userShops.forEach(shop => {
+      const opt = document.createElement('option');
+      opt.value = shop.shop_id;
+      opt.innerText = `${shop.shop_name} (${shop.shop_id})`;
+      if (String(currentVal) === String(shop.shop_id)) {
+        opt.selected = true;
+      }
+      shopSelect.appendChild(opt);
+    });
+    
+    renderShopsList();
   } catch (err) {
-    console.error("Erro ao ler credenciais Shopee do banco:", err);
+    console.error("Erro ao buscar lojas do usuário:", err);
   }
 }
 
-async function saveShopeeCredentials() {
+function renderShopsList() {
+  const container = document.getElementById('shopee-shops-list');
+  if (!container) return;
+  
+  if (userShops.length === 0) {
+    container.innerHTML = `
+      <div style="background-color: rgba(255, 255, 255, 0.01); border: 1px dashed hsl(var(--border-color)); padding: 24px; border-radius: 12px; text-align: center; color: hsl(var(--text-secondary)); font-size: 0.85rem;">
+        Nenhuma conta Shopee vinculada ainda. Use o formulário abaixo para conectar.
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = '';
+  userShops.forEach(shop => {
+    const card = document.createElement('div');
+    card.className = 'panel-card';
+    card.style.cssText = 'background: rgba(255,255,255,0.02); border: 1px solid hsl(var(--border-color)); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;';
+    
+    const isCurrent = String(selectedShop) === String(shop.shop_id);
+    if (isCurrent) {
+      card.style.borderColor = 'hsl(var(--color-primary))';
+    }
+    
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="background-color: rgba(139, 92, 246, 0.1); color: #8b5cf6; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+          <i data-lucide="store"></i>
+        </div>
+        <div>
+          <h4 style="font-weight: 600; color: white;">${escapeHTML(shop.shop_name)}</h4>
+          <p style="color: hsl(var(--text-secondary)); font-size: 0.75rem;">Shop ID: ${shop.shop_id} ${shop.updated_at ? `• Atualizado: ${new Date(shop.updated_at).toLocaleDateString('pt-BR')}` : ''}</p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        ${isCurrent ? `
+          <span style="font-size: 0.75rem; background-color: rgba(16, 185, 129, 0.15); color: #10b981; padding: 6px 12px; border-radius: 8px; display: inline-flex; align-items: center; font-weight: 600;">
+            Ativa
+          </span>
+        ` : `
+          <button class="btn-primary" style="padding: 6px 12px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: 1px solid hsl(var(--border-color)); color: white; width: auto;" onclick="filterDataByShop('${shop.shop_id}')">
+            Ativar
+          </button>
+        `}
+        <button class="btn-primary" style="padding: 6px 12px; font-size: 0.8rem; background: linear-gradient(135deg, hsl(var(--color-danger)), #ff4f4f); border: none; color: white; width: auto;" onclick="deleteShop('${shop.shop_id}')">
+          Desvincular
+        </button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+  
+  lucide.createIcons();
+}
+
+async function handleOAuthRedirect(code, shopId) {
+  if (!edgeFunctionUrl) {
+    alert("Atenção: Retorno de autorização da Shopee detectado, mas a URL da Edge Function não está configurada! Configure-a nas configurações da Shopee para completar a vinculação.");
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+  
+  const shopName = prompt(`Nova loja Shopee autorizada com sucesso! \nShop ID: ${shopId}\n\nPor favor, defina um apelido amigável para esta loja (ex: Loja Roupas, Loja SP):`);
+  if (!shopName) {
+    alert("Vinculação cancelada. O apelido é obrigatório para cadastrar a loja.");
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+  
+  // Visual loader
+  const listContainer = document.getElementById('shopee-shops-list');
+  if (listContainer) {
+    listContainer.innerHTML = `
+      <div style="background-color: rgba(255, 255, 255, 0.01); border: 1px dashed hsl(var(--border-color)); padding: 24px; border-radius: 12px; text-align: center;">
+        <i data-lucide="loader-2" class="spin" style="margin-right: 8px;"></i>
+        Vinculando sua loja Shopee via Edge Function...
+      </div>
+    `;
+    lucide.createIcons();
+  }
+  
+  try {
+    const session = (await supabaseClient.auth.getSession()).data.session;
+    const token = session ? session.access_token : '';
+    
+    if (!token) throw new Error("Usuário não autenticado.");
+    
+    const res = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        action: 'auth-shop',
+        code: code,
+        shop_id: Number(shopId),
+        shop_name: shopName
+      })
+    });
+    
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(errorText || `Erro na Edge Function status ${res.status}`);
+    }
+    
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error(data.error || "Erro desconhecido na Edge Function");
+    }
+    
+    alert(`Sucesso! A loja "${shopName}" foi vinculada.`);
+    selectedShop = shopId;
+    const selectShopEl = document.getElementById('select-shop');
+    if (selectShopEl) selectShopEl.value = shopId;
+    
+    await fetchUserShops();
+    await loadAllData();
+  } catch (err) {
+    console.error("Erro ao vincular loja OAuth:", err);
+    alert("Falha ao vincular loja Shopee: " + err.message);
+  } finally {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
+async function deleteShop(shopId) {
+  if (!supabaseClient) return;
+  if (!confirm(`Tem certeza que deseja desvincular a loja ${shopId}? Todos os dados desta loja continuarão no banco, mas a integração de sincronização e credenciais serão removidos.`)) {
+    return;
+  }
+  
+  try {
+    const { error } = await supabaseClient
+      .from('shopee_shops')
+      .delete()
+      .eq('shop_id', Number(shopId));
+      
+    if (error) throw error;
+    
+    alert("Loja desvinculada com sucesso!");
+    if (String(selectedShop) === String(shopId)) {
+      selectedShop = 'all';
+      const selectShopEl = document.getElementById('select-shop');
+      if (selectShopEl) selectShopEl.value = 'all';
+    }
+    await fetchUserShops();
+    await loadAllData();
+  } catch (err) {
+    console.error("Erro ao deletar loja:", err);
+    alert("Erro ao desvincular loja: " + err.message);
+  }
+}
+
+async function executeConnectShop() {
   if (!supabaseClient) {
     alert("Configure o Supabase primeiro!");
     return;
   }
   
-  const shopId = document.getElementById('shopee-shop-id').value.trim();
-  const accessToken = document.getElementById('shopee-access-token').value.trim();
-  const refreshToken = document.getElementById('shopee-refresh-token').value.trim();
+  const shopNameInput = document.getElementById('new-shop-name').value.trim();
+  const shopIdInput = document.getElementById('new-shop-id').value.trim();
+  const codeInput = document.getElementById('new-shop-code').value.trim();
   
-  if (!shopId) {
-    alert("O campo Shop ID é obrigatório!");
+  const isManual = document.getElementById('manual-tokens-section').style.display === 'block';
+  
+  if (!shopNameInput) {
+    alert("O Nome/Apelido da loja é obrigatório!");
     return;
   }
   
-  const keysToUpsert = [
-    { key: 'shop_id', value: shopId, updated_at: new Date().toISOString() },
-    { key: 'access_token', value: accessToken, updated_at: new Date().toISOString() },
-    { key: 'refresh_token', value: refreshToken, updated_at: new Date().toISOString() }
-  ];
+  const executeBtn = document.getElementById('btn-connect-shop-execute');
+  const originalText = executeBtn.innerText;
+  executeBtn.innerText = "Vinculando...";
+  executeBtn.disabled = true;
   
   try {
-    for (let item of keysToUpsert) {
+    const session = (await supabaseClient.auth.getSession()).data.session;
+    const token = session ? session.access_token : '';
+    if (!token) throw new Error("Usuário não autenticado.");
+    
+    if (isManual) {
+      const accessToken = document.getElementById('new-shop-access').value.trim();
+      const refreshToken = document.getElementById('new-shop-refresh').value.trim();
+      
+      if (!shopIdInput || !accessToken || !refreshToken) {
+        throw new Error("Para vinculação manual, preencha o Shop ID, Access Token e Refresh Token.");
+      }
+      
+      const expireTimeIso = new Date(Date.now() + 4 * 3600 * 1000).toISOString();
+      
       const { error } = await supabaseClient
-        .from('sync_state')
-        .upsert(item, { onConflict: 'key' });
+        .from('shopee_shops')
+        .upsert({
+          user_id: session.user.id,
+          shop_id: Number(shopIdInput),
+          shop_name: shopNameInput,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          token_expire_in: expireTimeIso,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,shop_id' });
+        
       if (error) throw error;
+      
+      alert(`Sucesso! A loja "${shopNameInput}" foi cadastrada manualmente.`);
+    } else {
+      let finalCode = codeInput;
+      let finalShopId = shopIdInput;
+      
+      if (codeInput.includes('?') || codeInput.includes('code=')) {
+        try {
+          const urlString = codeInput.startsWith('http') ? codeInput : 'https://dummy.com?' + codeInput;
+          const urlObj = new URL(urlString);
+          const urlCode = urlObj.searchParams.get('code');
+          const urlShopId = urlObj.searchParams.get('shop_id');
+          if (urlCode) finalCode = urlCode;
+          if (urlShopId) finalShopId = urlShopId;
+        } catch (e) {
+          console.warn("Failed to parse URL query params from input", e);
+        }
+      }
+      
+      if (!finalCode) {
+        throw new Error("Insira um código de autorização ou a URL de retorno válida.");
+      }
+      if (!finalShopId) {
+        throw new Error("Insira o Shop ID associado a este código.");
+      }
+      if (!edgeFunctionUrl) {
+        throw new Error("A URL da Edge Function não está configurada!");
+      }
+      
+      const res = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: 'auth-shop',
+          code: finalCode,
+          shop_id: Number(finalShopId),
+          shop_name: shopNameInput
+        })
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || `Erro na Edge Function status ${res.status}`);
+      }
+      
+      const data = await res.json();
+      if (!data.ok) {
+        throw new Error(data.error || "Erro na resposta da Edge Function");
+      }
+      
+      alert(`Sucesso! A loja "${shopNameInput}" foi vinculada via OAuth.`);
     }
     
-    alert("Credenciais da Shopee salvas com sucesso!");
+    document.getElementById('new-shop-name').value = '';
+    document.getElementById('new-shop-id').value = '';
+    document.getElementById('new-shop-code').value = '';
+    document.getElementById('new-shop-access').value = '';
+    document.getElementById('new-shop-refresh').value = '';
+    
+    await fetchUserShops();
+    await loadAllData();
   } catch (err) {
-    console.error("Erro ao salvar credenciais Shopee:", err);
-    alert("Erro ao salvar credenciais no banco: " + err.message);
+    console.error("Erro ao vincular loja:", err);
+    alert("Falha ao vincular loja: " + err.message);
+  } finally {
+    executeBtn.innerText = originalText;
+    executeBtn.disabled = false;
+  }
+}
+
+async function openShopeeOAuth(event) {
+  if (event) event.preventDefault();
+  
+  const linkBtn = document.getElementById('btn-generate-oauth');
+  const originalText = linkBtn.innerText;
+  linkBtn.innerText = "Gerando link...";
+  
+  try {
+    await fetchUserShops();
+    if (window.shopeeOauthUrl) {
+      window.open(window.shopeeOauthUrl, '_blank');
+    } else {
+      throw new Error("Não foi possível obter a URL de autorização. Verifique se a URL da Edge Function está correta e se está logado.");
+    }
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    linkBtn.innerText = originalText;
+  }
+}
+
+async function filterDataByShop(shopId) {
+  selectedShop = shopId;
+  const selectShopEl = document.getElementById('select-shop');
+  if (selectShopEl) selectShopEl.value = shopId;
+  
+  await fetchUserShops(); // Refresh current select status and listings
+  await loadAllData();
+}
+
+function toggleManualTokens(event) {
+  if (event) event.preventDefault();
+  const section = document.getElementById('manual-tokens-section');
+  const codeGroup = document.getElementById('oauth-code-group');
+  const toggleBtn = document.getElementById('toggle-manual-tokens-btn');
+  
+  if (section.style.display === 'none') {
+    section.style.display = 'block';
+    codeGroup.style.display = 'none';
+    toggleBtn.innerText = "Ou usar código de autorização / OAuth (recomendado)";
+  } else {
+    section.style.display = 'none';
+    codeGroup.style.display = 'block';
+    toggleBtn.innerText = "Ou inserir tokens manuais (avançado)";
   }
 }
 
@@ -1584,18 +2050,51 @@ async function triggerShopeeSync(action, btnElement) {
     return;
   }
   
+  if (!supabaseClient) {
+    alert("Supabase não configurado.");
+    return;
+  }
+
+  let syncShopId = selectedShop;
+  if (syncShopId === 'all') {
+    if (userShops.length === 0) {
+      alert("Nenhuma loja conectada para sincronizar! Adicione uma loja primeiro.");
+      return;
+    }
+    
+    const shopOptions = userShops.map((s, idx) => `${idx + 1} - ${s.shop_name} (${s.shop_id})`).join('\n');
+    const choice = prompt(`Selecione a loja para sincronizar o módulo:\n\n${shopOptions}\n\nDigite o número correspondente (1 a ${userShops.length}):`);
+    if (!choice) return;
+    
+    const idx = parseInt(choice) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= userShops.length) {
+      alert("Seleção inválida!");
+      return;
+    }
+    syncShopId = userShops[idx].shop_id;
+  }
+
   const originalText = btnElement.innerText;
   btnElement.innerText = "Sincronizando...";
   btnElement.disabled = true;
   
   try {
+    const session = (await supabaseClient.auth.getSession()).data.session;
+    const token = session ? session.access_token : '';
+    if (!token) {
+      throw new Error("Você precisa estar logado para sincronizar.");
+    }
+
     const res = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`
+        'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ action })
+      body: JSON.stringify({ 
+        action,
+        shop_id: Number(syncShopId)
+      })
     });
     
     if (!res.ok) {
@@ -1603,7 +2102,7 @@ async function triggerShopeeSync(action, btnElement) {
       throw new Error(`Erro na API (${res.status}): ${errorData}`);
     }
     
-    alert(`Ação '${action}' executada com sucesso!`);
+    alert(`Ação '${action}' executada com sucesso para a loja ${syncShopId}!`);
     
     // Refresh tables
     setTimeout(fetchSyncHealth, 2000);
@@ -1701,15 +2200,15 @@ async function openProductOptimizer(itemId) {
           <!-- TAB 3: VENDAS E ADS -->
           <div id="tab-sales" class="tab-content">
              <div class="panel-card" style="margin-bottom: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                  <h4>Histórico de Vendas (Orgânico)</h4>
-                  <select id="pm-sales-period" onchange="loadModalCharts('${itemId}')" class="select-field" style="width: auto; padding: 6px 10px;">
-                    <option value="7">Últimos 7 dias</option>
-                    <option value="15">Últimos 15 dias</option>
-                    <option value="30" selected>Últimos 30 dias</option>
-                  </select>
-                </div>
-                <div id="pm-chart-sales" style="min-height: 200px; display: flex; align-items: center; justify-content: center; color: hsl(var(--text-muted));">Aguarde...</div>
+               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                 <h4>Histórico de Vendas (Orgânico)</h4>
+                 <select id="pm-sales-period" onchange="loadModalCharts('${itemId}')" class="select-field" style="width: auto; padding: 6px 10px;">
+                   <option value="7">Últimos 7 dias</option>
+                   <option value="15">Últimos 15 dias</option>
+                   <option value="30" selected>Últimos 30 dias</option>
+                 </select>
+               </div>
+               <div id="pm-chart-sales" style="min-height: 200px; display: flex; align-items: center; justify-content: center; color: hsl(var(--text-muted));">Aguarde...</div>
              </div>
              <div class="panel-card">
               <h4 style="margin-bottom: 12px;">Performance de Ads</h4>
@@ -1978,3 +2477,4 @@ async function loadModalCharts(itemId) {
 function closeProductModal() {
   document.getElementById('product-modal').style.display = 'none';
 }
+

@@ -1,4 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { AsyncLocalStorage } from "node:async_local_storage";
+
+const shopContext = new AsyncLocalStorage<Record<string, any>>();
 
 type Json =
   | string
@@ -22,7 +25,8 @@ type SyncAction =
   | "sync-wallet-step"
   | "sync-returns-step"
   | "sync-ads-balance"
-  | "sync-ads-daily-step";
+  | "sync-ads-daily-step"
+  | "auth-shop";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -127,19 +131,25 @@ async function respectRateLimit(overrideMs?: number) {
 }
 
 async function logSync(module: string, status: string, message: string) {
+  const activeShop = shopContext.getStore();
+  const userId = activeShop?.user_id || null;
   await supabase.from("sync_log").insert({
     module,
     status,
     message,
     created_at: nowIso(),
+    user_id: userId,
   });
 }
 
 async function getSyncState(key: string): Promise<string | null> {
+  const activeShop = shopContext.getStore();
+  const prefixedKey = activeShop?.shop_id ? `${activeShop.shop_id}:${key}` : key;
+
   const { data, error } = await supabase
     .from("sync_state")
     .select("value")
-    .eq("key", key)
+    .eq("key", prefixedKey)
     .limit(1)
     .maybeSingle();
 
@@ -148,10 +158,15 @@ async function getSyncState(key: string): Promise<string | null> {
 }
 
 async function setSyncState(key: string, value: string | number) {
+  const activeShop = shopContext.getStore();
+  const prefixedKey = activeShop?.shop_id ? `${activeShop.shop_id}:${key}` : key;
+  const userId = activeShop?.user_id || null;
+
   const row = {
-    key,
+    key: prefixedKey,
     value: String(value),
     updated_at: nowIso(),
+    user_id: userId,
   };
 
   const { error } = await supabase
@@ -162,7 +177,9 @@ async function setSyncState(key: string, value: string | number) {
 }
 
 async function deleteSyncState(key: string) {
-  const { error } = await supabase.from("sync_state").delete().eq("key", key);
+  const activeShop = shopContext.getStore();
+  const prefixedKey = activeShop?.shop_id ? `${activeShop.shop_id}:${key}` : key;
+  const { error } = await supabase.from("sync_state").delete().eq("key", prefixedKey);
   if (error) throw error;
 }
 
@@ -179,6 +196,18 @@ async function getLatestAdsPerformanceDate(): Promise<string | null> {
 }
 
 async function getTokenState() {
+  const activeShop = shopContext.getStore();
+  if (activeShop) {
+    const expireDate = activeShop.token_expire_in ? new Date(activeShop.token_expire_in) : new Date(0);
+    const expireEpoch = Math.floor(expireDate.getTime() / 1000);
+    return {
+      shopId: String(activeShop.shop_id),
+      accessToken: activeShop.access_token || "",
+      refreshToken: activeShop.refresh_token || "",
+      expireIn: String(expireEpoch),
+    };
+  }
+
   const [shopIdState, accessTokenState, refreshTokenState, expireState] =
     await Promise.all([
       getSyncState("shop_id"),
@@ -201,6 +230,26 @@ async function persistTokens(params: {
   refreshToken: string;
   tokenExpireIn: string;
 }) {
+  const activeShop = shopContext.getStore();
+  if (activeShop) {
+    const expireTimeIso = new Date(Number(params.tokenExpireIn) * 1000).toISOString();
+    const { error } = await supabase
+      .from("shopee_shops")
+      .update({
+        access_token: params.accessToken,
+        refresh_token: params.refreshToken,
+        token_expire_in: expireTimeIso,
+        updated_at: nowIso(),
+      })
+      .eq("id", activeShop.id);
+    if (error) throw error;
+
+    activeShop.access_token = params.accessToken;
+    activeShop.refresh_token = params.refreshToken;
+    activeShop.token_expire_in = expireTimeIso;
+    return;
+  }
+
   await Promise.all([
     setSyncState("shop_id", params.shopId),
     setSyncState("access_token", params.accessToken),
@@ -391,8 +440,25 @@ async function upsertBatches(
 ) {
   if (!rows.length) return 0;
 
+  const activeShop = shopContext.getStore();
+  const userId = activeShop?.user_id || null;
+  const shopId = activeShop?.shop_id ? Number(activeShop.shop_id) : null;
+
+  const preparedRows = rows.map((row) => {
+    const newRow = { ...row };
+    // Inject shop_id if table is Shopee related
+    if (shopId && (table.startsWith("shopee_") || table === "vw_financial_summary" || table === "vw_sync_health")) {
+      newRow.shop_id = shopId;
+    }
+    // Inject user_id if table is S&OP related or sync_log
+    if (userId && (table.startsWith("upseller_") || table === "landed_cost_entries" || table === "sync_log" || table === "sync_state")) {
+      newRow.user_id = userId;
+    }
+    return newRow;
+  });
+
   let total = 0;
-  for (const batch of chunk(rows, 500)) {
+  for (const batch of chunk(preparedRows, 500)) {
     const { error } = await supabase.from(table).upsert(batch, { onConflict });
     if (error) throw error;
     total += batch.length;
@@ -647,7 +713,6 @@ function slidingWindows(timeFrom: number, timeTo: number, days: number) {
   return windows;
 }
 
-// Keep the code simple for other parts
 function formatAdsDate(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -1806,18 +1871,151 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return jsonResponse({ ok: false, error: "Cabeçalho Authorization Bearer ausente ou inválido" }, 401);
+    }
+    const token = authHeader.substring(7);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return jsonResponse({ ok: false, error: "Usuário não autenticado no Supabase" }, 401);
+    }
+
     if (req.method === "GET") {
-      return jsonResponse(await handleAction("status"));
+      const { data: shops, error: shopsErr } = await supabase
+        .from("shopee_shops")
+        .select("shop_id, shop_name, updated_at")
+        .eq("user_id", user.id)
+        .order("shop_name", { ascending: true });
+        
+      if (shopsErr) throw shopsErr;
+
+      // Generate Shopee OAuth Link
+      // In Shopee API v2, the auth link needs a signature
+      let oauthUrl = "";
+      const referer = req.headers.get("referer") || "";
+      // Clean query params from redirect url
+      const redirectUrl = referer.split("?")[0];
+      
+      if (SHOPEE_PARTNER_ID && SHOPEE_PARTNER_KEY && redirectUrl) {
+        const timestamp = Math.floor(Date.now() / 1000);
+        const authPath = "/api/v2/shop/auth_partner";
+        const sign = await cryptoSign(authPath, timestamp);
+        oauthUrl = `${SHOPEE_BASE_URL}${authPath}?partner_id=${SHOPEE_PARTNER_ID}&timestamp=${timestamp}&sign=${sign}&redirect=${encodeURIComponent(redirectUrl)}`;
+      }
+
+      return jsonResponse({
+        ok: true,
+        authenticated: true,
+        user: { email: user.email },
+        shops: shops || [],
+        partnerId: SHOPEE_PARTNER_ID,
+        oauthUrl,
+      });
     }
 
     if (req.method !== "POST") {
       return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
     }
 
-    const body = (await req.json().catch(() => ({}))) as { action?: SyncAction };
+    const body = (await req.json().catch(() => ({}))) as { action?: SyncAction; shop_id?: number; [key: string]: any };
     const action = body.action ?? "status";
 
-    return jsonResponse(await handleAction(action));
+    if (action === "auth-shop") {
+      const { code, shop_id, shop_name } = body as { code?: string; shop_id?: number; shop_name?: string };
+      if (!code || !shop_id || !shop_name) {
+        return jsonResponse({ ok: false, error: "Parâmetros code, shop_id e shop_name são obrigatórios." }, 400);
+      }
+
+      // Check current shop count for the user
+      const { count, error: countErr } = await supabase
+        .from("shopee_shops")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      if (countErr) throw countErr;
+      if (count !== null && count >= 5) {
+        return jsonResponse({ ok: false, error: "Limite de 5 contas Shopee por usuário atingido!" }, 400);
+      }
+
+      const data = await shopeeRequest<{
+        response?: {
+          access_token?: string;
+          refresh_token?: string;
+          expire_in?: number;
+        };
+        access_token?: string;
+        refresh_token?: string;
+        expire_in?: number;
+      }>({
+        method: "POST",
+        path: "/api/v2/auth/access_token/get",
+        requiresAuth: false,
+        payload: {
+          code,
+          shop_id: Number(shop_id),
+          partner_id: SHOPEE_PARTNER_ID,
+        },
+      });
+
+      const response = data.response ?? data;
+      const accessToken = response.access_token ?? "";
+      const refreshToken = response.refresh_token ?? "";
+      const expireIn = Number(response.expire_in ?? 0);
+
+      if (!accessToken || !refreshToken || !expireIn) {
+        return jsonResponse({ ok: false, error: `Falha ao obter tokens na Shopee: ${JSON.stringify(data)}` }, 400);
+      }
+
+      const expireTimeIso = new Date(Date.now() + expireIn * 1000).toISOString();
+
+      // Upsert to shopee_shops
+      const { error: upsertErr } = await supabase
+        .from("shopee_shops")
+        .upsert({
+          user_id: user.id,
+          shop_id: Number(shop_id),
+          shop_name,
+          access_token: accessToken,
+          refresh_token: refreshToken,
+          token_expire_in: expireTimeIso,
+          updated_at: nowIso(),
+        }, { onConflict: "user_id,shop_id" });
+
+      if (upsertErr) throw upsertErr;
+
+      return jsonResponse({
+        ok: true,
+        action,
+        shopId: shop_id,
+        shopName: shop_name,
+      });
+    }
+
+    // For all other actions, we require shop_id
+    const shopId = body.shop_id;
+    if (!shopId) {
+      return jsonResponse({ ok: false, error: "Parâmetro shop_id é obrigatório" }, 400);
+    }
+
+    // Fetch the shop credentials for this user
+    const { data: shop, error: shopError } = await supabase
+      .from("shopee_shops")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("shop_id", Number(shopId))
+      .maybeSingle();
+
+    if (shopError || !shop) {
+      return jsonResponse({ ok: false, error: `Loja ${shopId} não encontrada ou não pertence a este usuário.` }, 403);
+    }
+
+    // Run within AsyncLocalStorage context!
+    return await shopContext.run(shop, async () => {
+      const result = await handleAction(action);
+      return jsonResponse(result);
+    });
+
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await logSync("edge_function", "ERROR", message).catch(() => undefined);

@@ -118,8 +118,16 @@
           <p id="view-subtitle">Bem-vindo à sua central de comando operacional.</p>
         </div>
         
+        <!-- Global Shop Selector -->
+        <div class="global-filter-container" id="global-shop-container" style="margin-left: auto; margin-right: 12px; display: flex; align-items: center; gap: 8px;">
+          <label for="select-shop" style="font-size: 0.8rem; color: hsl(var(--text-secondary)); font-weight: 500;">Loja:</label>
+          <select id="select-shop" onchange="filterDataByShop(this.value)" class="select-field" style="width: auto; padding: 6px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid hsl(var(--border-color)); color: white; cursor: pointer; outline: none; font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
+            <option value="all" selected>Todas as Lojas (Consolidado)</option>
+          </select>
+        </div>
+
         <!-- Global Period Selector -->
-        <div class="global-filter-container" id="global-period-container" style="margin-left: auto; margin-right: 20px; display: flex; align-items: center; gap: 8px;">
+        <div class="global-filter-container" id="global-period-container" style="display: flex; align-items: center; gap: 8px; margin-right: 20px;">
           <label for="select-period" style="font-size: 0.8rem; color: hsl(var(--text-secondary)); font-weight: 500;">Período:</label>
           <select id="select-period" onchange="filterDataByPeriod(this.value)" class="select-field" style="width: auto; padding: 6px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); border: 1px solid hsl(var(--border-color)); color: white; cursor: pointer; outline: none; font-family: 'Outfit', sans-serif; font-size: 0.85rem;">
             <option value="7">Últimos 7 dias</option>
@@ -517,25 +525,63 @@
             </div>
           </div>
 
-          <h4 style="margin-bottom: 16px; font-weight: 600; border-top: 1px solid hsl(var(--border-color)); padding-top: 20px;">Credenciais da API da Shopee</h4>
+          <h4 style="margin-bottom: 16px; font-weight: 600; border-top: 1px solid hsl(var(--border-color)); padding-top: 20px;">Contas Shopee Conectadas (Máx: 5)</h4>
           <p style="color: hsl(var(--text-secondary)); font-size: 0.8rem; margin-bottom: 16px;">
-            Configure o Shop ID e os tokens de acesso para que a Edge Function possa se conectar à API da Shopee.
+            Cada conta Shopee conectada sincronizará seus produtos, vendas e Ads de forma privada.
           </p>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="shopee-shop-id">Shop ID</label>
-              <input type="text" id="shopee-shop-id" placeholder="Ex: 1382486082" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white;">
+          
+          <!-- List of Connected Shops -->
+          <div id="shopee-shops-list" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+            <!-- Rendered dynamically by JS -->
+          </div>
+
+          <!-- Add New Shop Container -->
+          <div id="add-shop-container" class="panel-card" style="background-color: rgba(255, 255, 255, 0.02); border: 1px dashed hsl(var(--border-color)); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <h5 style="font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; font-size: 0.95rem;">
+              <i data-lucide="plus-circle" style="width: 18px; height: 18px; color: hsl(var(--color-primary));"></i> Conectar Nova Conta Shopee
+            </h5>
+            
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 16px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="new-shop-name">Nome / Apelido da Loja</label>
+                <input type="text" id="new-shop-name" placeholder="Ex: Loja Roupas, Loja SP" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white; font-family: 'Outfit', sans-serif;">
+              </div>
+              <div class="form-group" style="margin-bottom: 0;">
+                <label for="new-shop-id">Shop ID</label>
+                <input type="text" id="new-shop-id" placeholder="Ex: 1382486082" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white; font-family: 'Outfit', sans-serif;">
+              </div>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="shopee-access-token">Access Token</label>
-              <input type="password" id="shopee-access-token" placeholder="Insira o Access Token" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white;">
+
+            <div class="form-group" style="margin-bottom: 16px;" id="oauth-code-group">
+              <label style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <span>Código de Autorização (Auth Code)</span>
+                <a href="#" id="btn-generate-oauth" onclick="openShopeeOAuth(event)" style="color: hsl(var(--color-primary)); text-decoration: underline; font-size: 0.75rem; font-weight: 600;">Gerar Link de Autorização</a>
+              </label>
+              <input type="text" id="new-shop-code" placeholder="Insira o Code ou a URL de retorno completa" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white; font-family: monospace; font-size: 0.8rem;">
+              <small style="color: hsl(var(--text-muted)); font-size: 0.75rem; display: block; margin-top: 6px;">
+                Clique em "Gerar Link de Autorização" acima para fazer login no marketplace e autorizar o app, então copie o código da URL final e cole aqui.
+              </small>
             </div>
-            <div class="form-group" style="margin-bottom: 0;">
-              <label for="shopee-refresh-token">Refresh Token</label>
-              <input type="password" id="shopee-refresh-token" placeholder="Insira o Refresh Token" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white;">
+
+            <!-- Manual input fields (Toggled by link below) -->
+            <div id="manual-tokens-section" style="display: none; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 16px; margin-top: 16px; margin-bottom: 16px;">
+              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="new-shop-access">Access Token Manual</label>
+                  <input type="password" id="new-shop-access" placeholder="Insira o Access Token" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white; font-family: 'Outfit', sans-serif;">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="new-shop-refresh">Refresh Token Manual</label>
+                  <input type="password" id="new-shop-refresh" placeholder="Insira o Refresh Token" style="width: 100%; padding: 12px 16px; border-radius: 10px; border: 1px solid hsl(var(--border-color)); background-color: rgba(0, 0, 0, 0.2); color: white; font-family: 'Outfit', sans-serif;">
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px;">
+              <a href="#" onclick="toggleManualTokens(event)" id="toggle-manual-tokens-btn" style="color: hsl(var(--text-muted)); font-size: 0.8rem; text-decoration: none;">Ou inserir tokens manuais (avançado)</a>
+              <button class="btn-primary" style="width: auto; padding: 10px 24px;" id="btn-connect-shop-execute" onclick="executeConnectShop()">Vincular Loja Shopee</button>
             </div>
           </div>
-          <button class="btn-primary" style="width: auto; padding: 10px 24px; margin-bottom: 24px;" onclick="saveShopeeCredentials()">Salvar Chaves API Shopee</button>
 
           <div class="card-grid" id="sync-health-cards" style="margin-bottom: 24px;">
             <!-- Renderizado dinamicamente pelo JS -->
@@ -600,12 +646,12 @@
           </div>
           
           <div class="form-group">
-            <label>Supabase URL active</label>
+            <label>Supabase URL ativo</label>
             <input type="text" id="config-supabase-url" disabled>
           </div>
           
           <div class="form-group">
-            <label>Supabase Anon Key active</label>
+            <label>Supabase Anon Key ativo</label>
             <input type="password" id="config-supabase-key" value="••••••••••••••••••••••••" disabled>
           </div>
           

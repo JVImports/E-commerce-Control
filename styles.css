@@ -1068,3 +1068,85 @@ table.data-table tr:hover td {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   animation: fadeIn 0.4s ease-out;
 }
+
+/* Connected Shop List Cards */
+.shop-connected-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid hsl(var(--border-color));
+  border-radius: 12px;
+  padding: 16px 20px;
+  transition: var(--transition-smooth);
+}
+
+.shop-connected-card:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(138, 75, 250, 0.3);
+  box-shadow: 0 4px 12px rgba(138, 75, 250, 0.05);
+}
+
+.shop-info-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.shop-avatar {
+  background: linear-gradient(135deg, hsl(var(--color-primary)), #b188ff);
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.shop-details-meta h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.shop-details-meta p {
+  font-size: 0.75rem;
+  color: hsl(var(--text-secondary));
+}
+
+.shop-actions-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-danger-outline {
+  background: transparent;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.btn-danger-outline:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+.badge-active {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
