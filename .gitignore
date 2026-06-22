@@ -1,0 +1,7 @@
+supabase.exe
+supabase-go.exe
+*.xlsx
+*.xls
+.netlify/
+node_modules/
+.env
