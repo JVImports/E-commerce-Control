@@ -6,6 +6,39 @@
     { role: 'cliente', name: 'Cliente JV', email: 'cliente@jvimports.com.br', password: 'JVCliente@2026' }
   ];
 
+  function patchSupabaseFinancialHistoryLimit() {
+    if (!window.supabase || window.supabase.__jvFinancialPatchApplied) return;
+
+    var originalCreateClient = window.supabase.createClient;
+    if (typeof originalCreateClient !== 'function') return;
+
+    window.supabase.createClient = function () {
+      var client = originalCreateClient.apply(window.supabase, arguments);
+      var originalFrom = client.from.bind(client);
+
+      client.from = function (tableName) {
+        var query = originalFrom(tableName);
+
+        if (tableName === 'vw_financial_daily' && query && typeof query.limit === 'function') {
+          var originalLimit = query.limit.bind(query);
+          query.limit = function (count, options) {
+            if (Number(count) === 365) {
+              console.info('JV hotfix: removendo limite de 365 linhas em vw_financial_daily para carregar todo o histórico financeiro.');
+              return query;
+            }
+            return originalLimit(count, options);
+          };
+        }
+
+        return query;
+      };
+
+      return client;
+    };
+
+    window.supabase.__jvFinancialPatchApplied = true;
+  }
+
   function byId(id) {
     return document.getElementById(id);
   }
@@ -121,6 +154,8 @@
       return user.email.toLowerCase() === cleanEmail && user.password === password;
     });
   }
+
+  patchSupabaseFinancialHistoryLimit();
 
   window.executeAuth = async function () {
     var emailInput = byId('login-email');
