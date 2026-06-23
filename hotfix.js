@@ -6,6 +6,10 @@
     { role: 'cliente', name: 'Cliente JV', email: 'cliente@jvimports.com.br', password: 'JVCliente@2026' }
   ];
 
+  var commerceSalesDaily = [];
+  var commerceAdsDaily = [];
+  var commercePatchInstalled = false;
+
   function patchSupabaseFinancialHistoryLimit() {
     if (!window.supabase || window.supabase.__jvFinancialPatchApplied) return;
 
@@ -41,6 +45,184 @@
 
   function byId(id) {
     return document.getElementById(id);
+  }
+
+  function formatBRL(value) {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+  }
+
+  function getClient() {
+    try {
+      if (typeof supabaseClient !== 'undefined' && supabaseClient) return supabaseClient;
+    } catch (e) {}
+    return window.supabaseClient || null;
+  }
+
+  function getSelectedPeriodValue() {
+    var select = byId('select-period');
+    if (select && select.value) return select.value;
+    try {
+      if (typeof selectedPeriod !== 'undefined') return selectedPeriod;
+    } catch (e) {}
+    return '30';
+  }
+
+  function getSelectedShopValue() {
+    var select = byId('select-shop');
+    if (select && select.value) return select.value;
+    try {
+      if (typeof selectedShop !== 'undefined') return selectedShop;
+    } catch (e) {}
+    return 'all';
+  }
+
+  function normalizeDate(value) {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+  }
+
+  function isDateInSelectedPeriod(dateValue) {
+    var dateStr = normalizeDate(dateValue);
+    if (!dateStr) return false;
+
+    var period = getSelectedPeriodValue();
+    if (period === 'all') return true;
+
+    var refDate = new Date(dateStr + 'T00:00:00');
+    var now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    var days = parseInt(period, 10);
+    if (isNaN(days)) return true;
+
+    var cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - days);
+    cutoff.setHours(0, 0, 0, 0);
+
+    return refDate >= cutoff && refDate <= now;
+  }
+
+  function matchesSelectedShop(row) {
+    var selected = getSelectedShopValue();
+    if (!selected || selected === 'all') return true;
+    return String(row.shop_id || '') === String(selected);
+  }
+
+  async function fetchCommerceDashboardSources() {
+    var client = getClient();
+    if (!client) return;
+
+    try {
+      var salesResult = await client
+        .from('vw_sales_daily')
+        .select('sales_date,gross_revenue,shop_id')
+        .order('sales_date', { ascending: true })
+        .limit(5000);
+
+      if (!salesResult.error) {
+        commerceSalesDaily = salesResult.data || [];
+      } else {
+        console.warn('JV hotfix: falha ao buscar vw_sales_daily', salesResult.error);
+      }
+    } catch (error) {
+      console.warn('JV hotfix: erro ao buscar vw_sales_daily', error);
+    }
+
+    try {
+      var adsResult = await client
+        .from('shopee_ads_daily_performance')
+        .select('performance_date,expense,direct_gmv,shop_id')
+        .order('performance_date', { ascending: true })
+        .limit(5000);
+
+      if (!adsResult.error) {
+        commerceAdsDaily = adsResult.data || [];
+      } else {
+        console.warn('JV hotfix: falha ao buscar shopee_ads_daily_performance', adsResult.error);
+      }
+    } catch (error) {
+      console.warn('JV hotfix: erro ao buscar shopee_ads_daily_performance', error);
+    }
+  }
+
+  function getCommerceMetrics() {
+    var salesRows = commerceSalesDaily.filter(function (row) {
+      return matchesSelectedShop(row) && isDateInSelectedPeriod(row.sales_date);
+    });
+
+    var adsRows = commerceAdsDaily.filter(function (row) {
+      return matchesSelectedShop(row) && isDateInSelectedPeriod(row.performance_date);
+    });
+
+    var revenue = salesRows.reduce(function (sum, row) {
+      return sum + Number(row.gross_revenue || 0);
+    }, 0);
+
+    var adsExpense = adsRows.reduce(function (sum, row) {
+      return sum + Number(row.expense || 0);
+    }, 0);
+
+    var adsGmv = adsRows.reduce(function (sum, row) {
+      return sum + Number(row.direct_gmv || 0);
+    }, 0);
+
+    return {
+      revenue: revenue,
+      adsExpense: adsExpense,
+      adsGmv: adsGmv,
+      roas: adsExpense > 0 ? (adsGmv / adsExpense).toFixed(2) : '0.00'
+    };
+  }
+
+  function applyCommerceDashboardMetrics() {
+    if (!commerceSalesDaily.length && !commerceAdsDaily.length) return;
+
+    var metrics = getCommerceMetrics();
+    var revenueCard = byId('card-faturamento');
+    var adsCard = byId('card-ads');
+    var roasSub = byId('sub-roas');
+
+    if (revenueCard) revenueCard.innerText = formatBRL(metrics.revenue);
+    if (adsCard) adsCard.innerText = formatBRL(metrics.adsExpense);
+    if (roasSub) roasSub.innerHTML = '<span class="trend-up"><i data-lucide="percent"></i> ROAS: ' + metrics.roas + '</span> no período';
+
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  }
+
+  function installCommerceDashboardPatch() {
+    if (commercePatchInstalled) return;
+
+    if (typeof window.loadAllData === 'function') {
+      var originalLoadAllData = window.loadAllData;
+      window.loadAllData = async function () {
+        var result = await originalLoadAllData.apply(this, arguments);
+        await fetchCommerceDashboardSources();
+        applyCommerceDashboardMetrics();
+        return result;
+      };
+    }
+
+    if (typeof window.filterDataByPeriod === 'function') {
+      var originalFilterDataByPeriod = window.filterDataByPeriod;
+      window.filterDataByPeriod = function () {
+        var result = originalFilterDataByPeriod.apply(this, arguments);
+        setTimeout(applyCommerceDashboardMetrics, 0);
+        return result;
+      };
+    }
+
+    if (typeof window.filterDataByShop === 'function') {
+      var originalFilterDataByShop = window.filterDataByShop;
+      window.filterDataByShop = function () {
+        var result = originalFilterDataByShop.apply(this, arguments);
+        setTimeout(applyCommerceDashboardMetrics, 0);
+        return result;
+      };
+    }
+
+    commercePatchInstalled = true;
   }
 
   function hasSupabaseCredentials() {
@@ -156,6 +338,7 @@
   }
 
   patchSupabaseFinancialHistoryLimit();
+  installCommerceDashboardPatch();
 
   window.executeAuth = async function () {
     var emailInput = byId('login-email');
@@ -242,6 +425,7 @@
   });
 
   window.addEventListener('DOMContentLoaded', function () {
+    installCommerceDashboardPatch();
     showLogin();
     setTimeout(recoverBlankScreen, 800);
     setTimeout(recoverBlankScreen, 2500);
