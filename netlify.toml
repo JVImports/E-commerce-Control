@@ -25,6 +25,16 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/theme.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/theme-toggle.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/hotfix.js"
   [headers.values]
     Cache-Control = "no-cache"
