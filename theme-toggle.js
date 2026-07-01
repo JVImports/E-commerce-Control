@@ -3,6 +3,8 @@
 
   var STORAGE_KEY = 'jv_theme';
   var ADS_ANALYZER_VERSION = '20260701-ads';
+  var ADS_ANALYZER_PRODUCT_VERSION = '20260701-product-ads-v2';
+  var LAYOUT_FIX_VERSION = '20260701-layout-fixes';
 
   function getStoredTheme() {
     var stored = null;
@@ -86,29 +88,49 @@
     document.head.appendChild(link);
   }
 
-  function ensureAdsAnalyzerAssets() {
-    ensureStylesheet('ads-analyzer-css', 'ads-analyzer.css?v=' + ADS_ANALYZER_VERSION);
-
-    if (document.getElementById('ads-analyzer-script')) {
-      if (window.jvAdsAnalyzer && typeof window.jvAdsAnalyzer.refresh === 'function') {
-        window.jvAdsAnalyzer.refresh({ silent: true });
-      }
+  function ensureScript(id, src, onload) {
+    var existing = document.getElementById(id);
+    if (existing) {
+      if (typeof onload === 'function') onload();
       return;
     }
-
     var script = document.createElement('script');
-    script.id = 'ads-analyzer-script';
-    script.src = 'ads-analyzer.js?v=' + ADS_ANALYZER_VERSION;
+    script.id = id;
+    script.src = src;
     script.defer = true;
-    script.onload = function () {
-      if (window.jvAdsAnalyzer && typeof window.jvAdsAnalyzer.refresh === 'function') {
-        window.jvAdsAnalyzer.refresh({ silent: true });
-      }
-      if (typeof window.renderDashboardCharts === 'function') {
-        setTimeout(function () { window.renderDashboardCharts(); }, 0);
-      }
-    };
+    if (typeof onload === 'function') script.onload = onload;
     document.body.appendChild(script);
+  }
+
+  function refreshAdsAnalyzer() {
+    if (window.jvAdsAnalyzer && typeof window.jvAdsAnalyzer.refresh === 'function') {
+      window.jvAdsAnalyzer.refresh({ silent: true });
+    }
+    if (typeof window.renderDashboardCharts === 'function') {
+      setTimeout(function () { window.renderDashboardCharts(); }, 0);
+    }
+  }
+
+  function ensureProductAdsAssets() {
+    ensureStylesheet('ads-analyzer-product-ads-css', 'ads-analyzer-product-ads.css?v=' + ADS_ANALYZER_PRODUCT_VERSION);
+    ensureScript('ads-analyzer-product-ads-script', 'ads-analyzer-product-ads.js?v=' + ADS_ANALYZER_PRODUCT_VERSION, function () {
+      refreshAdsAnalyzer();
+    });
+  }
+
+  function ensureAdsAnalyzerAssets() {
+    ensureStylesheet('layout-fixes-css', 'layout-fixes.css?v=' + LAYOUT_FIX_VERSION);
+    ensureStylesheet('ads-analyzer-css', 'ads-analyzer.css?v=' + ADS_ANALYZER_VERSION);
+
+    ensureScript('ads-analyzer-script', 'ads-analyzer.js?v=' + ADS_ANALYZER_VERSION, function () {
+      refreshAdsAnalyzer();
+      ensureProductAdsAssets();
+    });
+
+    if (document.getElementById('ads-analyzer-script')) {
+      refreshAdsAnalyzer();
+      ensureProductAdsAssets();
+    }
   }
 
   function installThemeToggle() {
