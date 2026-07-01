@@ -7,6 +7,16 @@
   var LAYOUT_FIX_VERSION = '20260701-layout-fixes';
   var SHOPEE_MULTI_APP_VERSION = '20260701-shopee-multi-app';
 
+  function guardShopeeOAuthCallback() {
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      if (params.get('code') && params.get('state')) {
+        sessionStorage.setItem('jv_shopee_oauth_callback', window.location.search);
+        window.history.replaceState({ jvShopeeOAuth: true }, document.title, window.location.pathname + window.location.hash);
+      }
+    } catch (e) {}
+  }
+
   function getStoredTheme() {
     var stored = null;
     try { stored = localStorage.getItem(STORAGE_KEY); } catch (e) {}
@@ -128,6 +138,7 @@
         window.jvShopeeMultiApp.install();
       }
     });
+    ensureScript('shopee-oauth-callback-script', 'shopee-oauth-callback.js?v=' + SHOPEE_MULTI_APP_VERSION);
   }
 
   function ensureProductAdsAssets() {
@@ -179,6 +190,7 @@
     applyTheme(next);
   };
 
+  guardShopeeOAuthCallback();
   patchApexCharts();
   applyTheme(getStoredTheme(), { silent: true });
 
