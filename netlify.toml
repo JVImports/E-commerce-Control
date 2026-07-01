@@ -40,6 +40,16 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/shopee-multi-app.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/shopee-multi-app.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/ads-analyzer.js"
   [headers.values]
     Cache-Control = "no-cache"
