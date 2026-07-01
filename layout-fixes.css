@@ -1,0 +1,178 @@
+/* Global responsive fixes for dashboard overflow and hidden horizontal content. */
+html,
+body {
+  max-width: 100%;
+}
+
+body {
+  overflow-x: auto;
+}
+
+#app-container,
+main.main-content,
+.view-section,
+.view-section.active,
+header.top-header,
+.header-title,
+.panel-grid,
+.card-grid,
+.task-widget-container,
+.panel-card,
+.metric-card,
+.config-container,
+.table-container,
+.modal-content,
+.ads-modal-content {
+  min-width: 0;
+  max-width: 100%;
+}
+
+main.main-content {
+  width: calc(100vw - var(--sidebar-width));
+  max-width: calc(100vw - var(--sidebar-width));
+  overflow-x: hidden;
+}
+
+header.top-header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header-title {
+  flex: 1 1 240px;
+}
+
+.header-title h1,
+.header-title p,
+.metric-value,
+.metric-sub,
+.ads-product-title,
+.ads-metric strong,
+table.data-table th,
+table.data-table td {
+  overflow-wrap: anywhere;
+}
+
+.global-filter-container,
+.profile-section,
+.theme-toggle-btn {
+  flex: 0 1 auto;
+}
+
+.table-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table.data-table {
+  min-width: max-content;
+}
+
+.table-container .ads-analyzer-table,
+#table-listings,
+#table-stock-planning,
+#table-dre {
+  min-width: 920px;
+}
+
+.panel-card > .table-container {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.modal-overlay {
+  padding: 12px;
+}
+
+.modal-content,
+.ads-modal-content {
+  width: min(100%, 1180px);
+  max-height: calc(100vh - 24px);
+}
+
+.ads-modal-header > div,
+.modal-header > div {
+  min-width: 0;
+}
+
+.ads-tabs,
+.modal-tabs {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ads-tabs .tab-btn,
+.modal-tabs .tab-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+#add-shop-container [style*="grid-template-columns: repeat(2, 1fr)"],
+#manual-tokens-section [style*="grid-template-columns: repeat(2, 1fr)"] {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+}
+
+@media (max-width: 768px) {
+  main.main-content {
+    width: calc(100vw - 68px);
+    max-width: calc(100vw - 68px);
+    padding: 18px 14px;
+  }
+
+  header.top-header {
+    align-items: flex-start;
+  }
+
+  .global-filter-container {
+    width: 100%;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    justify-content: space-between;
+  }
+
+  .global-filter-container .select-field,
+  #select-shop,
+  #select-period {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .profile-section {
+    margin-left: auto;
+  }
+
+  .panel-card,
+  .task-widget-container,
+  .metric-card,
+  .config-container {
+    padding: 18px;
+  }
+
+  .table-container .ads-analyzer-table,
+  #table-listings,
+  #table-stock-planning,
+  #table-dre {
+    min-width: 820px;
+  }
+}
+
+@media (max-width: 480px) {
+  main.main-content {
+    padding: 14px 10px;
+  }
+
+  .panel-card,
+  .task-widget-container,
+  .metric-card,
+  .config-container {
+    padding: 14px;
+  }
+
+  .table-container .ads-analyzer-table,
+  #table-listings,
+  #table-stock-planning,
+  #table-dre {
+    min-width: 760px;
+  }
+}
