@@ -2,6 +2,7 @@
   'use strict';
 
   var STORAGE_KEY = 'jv_theme';
+  var ADS_ANALYZER_VERSION = '20260701-ads';
 
   function getStoredTheme() {
     var stored = null;
@@ -76,6 +77,40 @@
     window.ApexCharts = PatchedApexCharts;
   }
 
+  function ensureStylesheet(id, href) {
+    if (document.getElementById(id)) return;
+    var link = document.createElement('link');
+    link.id = id;
+    link.rel = 'stylesheet';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function ensureAdsAnalyzerAssets() {
+    ensureStylesheet('ads-analyzer-css', 'ads-analyzer.css?v=' + ADS_ANALYZER_VERSION);
+
+    if (document.getElementById('ads-analyzer-script')) {
+      if (window.jvAdsAnalyzer && typeof window.jvAdsAnalyzer.refresh === 'function') {
+        window.jvAdsAnalyzer.refresh({ silent: true });
+      }
+      return;
+    }
+
+    var script = document.createElement('script');
+    script.id = 'ads-analyzer-script';
+    script.src = 'ads-analyzer.js?v=' + ADS_ANALYZER_VERSION;
+    script.defer = true;
+    script.onload = function () {
+      if (window.jvAdsAnalyzer && typeof window.jvAdsAnalyzer.refresh === 'function') {
+        window.jvAdsAnalyzer.refresh({ silent: true });
+      }
+      if (typeof window.renderDashboardCharts === 'function') {
+        setTimeout(function () { window.renderDashboardCharts(); }, 0);
+      }
+    };
+    document.body.appendChild(script);
+  }
+
   function installThemeToggle() {
     var header = document.querySelector('header.top-header');
     if (!header) return;
@@ -109,6 +144,7 @@
   window.addEventListener('DOMContentLoaded', function () {
     patchApexCharts();
     installThemeToggle();
+    ensureAdsAnalyzerAssets();
     applyTheme(getStoredTheme(), { silent: true });
   });
 })();
