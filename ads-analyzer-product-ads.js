@@ -1,14 +1,16 @@
 // JV Imports Ads Analyzer v2: real Shopee product Ads + account finance settings.
 (function () {
-  const PRODUCT_ADS_FUNCTION = 'shopee-sync-product-ads';
-  const DEFAULT_FINANCE = {
+  'use strict';
+
+  var PRODUCT_ADS_FUNCTION = 'shopee-sync-product-ads';
+  var DEFAULT_FINANCE = {
     commission_percent: 14,
     fixed_fee_amount: 4,
     service_fee_percent: 0,
     tax_percent: 0
   };
 
-  const state = {
+  var state = {
     currentModal: null,
     financeSettings: null,
     lastProductContext: null
@@ -18,6 +20,11 @@
     installConfigPanel();
     installTableInterceptor();
     patchAnalyzerOpen();
+    window.jvProductAdsAnalyzerV2 = {
+      open: openProductAnalyzerV2,
+      syncProductAds: callProductAdsSync,
+      refreshConfig: installConfigPanel
+    };
   }
 
   function patchAnalyzerOpen() {
@@ -26,11 +33,11 @@
   }
 
   function installTableInterceptor() {
-    const table = document.getElementById('table-listings');
+    var table = document.getElementById('table-listings');
     if (!table || table.dataset.productAdsV2 === 'true') return;
     table.dataset.productAdsV2 = 'true';
     table.addEventListener('click', function (event) {
-      const row = event.target && event.target.closest ? event.target.closest('tr[data-item-id]') : null;
+      var row = event.target && event.target.closest ? event.target.closest('tr[data-item-id]') : null;
       if (!row) return;
       event.preventDefault();
       event.stopPropagation();
@@ -40,10 +47,10 @@
   }
 
   function installConfigPanel() {
-    const configView = document.getElementById('config-view');
+    var configView = document.getElementById('config-view');
     if (!configView || document.getElementById('commerce-finance-settings-panel')) return;
 
-    const panel = document.createElement('div');
+    var panel = document.createElement('div');
     panel.id = 'commerce-finance-settings-panel';
     panel.className = 'panel-card commerce-settings-panel';
     panel.innerHTML = [
@@ -62,9 +69,11 @@
     ].join('');
     configView.appendChild(panel);
 
-    const saveBtn = document.getElementById('cfg-save-finance');
-    const syncBtn = document.getElementById('cfg-sync-product-ads');
-    if (saveBtn) saveBtn.addEventListener('click', saveFinanceSettingsToAccount);
+    var saveBtn = document.getElementById('cfg-save-finance');
+    var syncBtn = document.getElementById('cfg-sync-product-ads');
+    if (saveBtn) saveBtn.addEventListener('click', function () {
+      saveFinanceSettingsToAccount().catch(function (error) { setFinanceStatus('Falha ao salvar: ' + error.message, true); });
+    });
     if (syncBtn) syncBtn.addEventListener('click', function () { syncProductAdsFromConfig(syncBtn); });
 
     loadFinanceSettingsFromAccount().then(fillFinanceSettingsForm).catch(function (error) {
@@ -79,37 +88,36 @@
 
   async function loadFinanceSettingsFromAccount() {
     if (!hasSupabase()) return DEFAULT_FINANCE;
-    const user = await getCurrentUser();
-    let userRows = [];
+    var user = await getCurrentUser();
     if (user) {
-      const { data, error } = await supabaseClient
+      var own = await supabaseClient
         .from('commerce_fee_settings')
         .select('*')
         .eq('marketplace', 'shopee')
         .eq('user_id', user.id)
         .order('updated_at', { ascending: false })
         .limit(1);
-      if (error) throw error;
-      userRows = data || [];
-    }
-    if (userRows.length > 0) {
-      state.financeSettings = normalizeFinanceSettings(userRows[0]);
-      return state.financeSettings;
+      if (own.error) throw own.error;
+      if ((own.data || []).length) {
+        state.financeSettings = normalizeFinanceSettings(own.data[0]);
+        return state.financeSettings;
+      }
     }
 
-    const { data, error } = await supabaseClient
+    var fallback = await supabaseClient
       .from('commerce_fee_settings')
       .select('*')
       .eq('marketplace', 'shopee')
       .is('user_id', null)
       .order('updated_at', { ascending: false })
       .limit(1);
-    if (error) throw error;
-    state.financeSettings = normalizeFinanceSettings((data || [])[0] || DEFAULT_FINANCE);
+    if (fallback.error) throw fallback.error;
+    state.financeSettings = normalizeFinanceSettings((fallback.data || [])[0] || DEFAULT_FINANCE);
     return state.financeSettings;
   }
 
   function normalizeFinanceSettings(row) {
+    row = row || DEFAULT_FINANCE;
     return {
       id: row.id || null,
       marketplace: row.marketplace || 'shopee',
@@ -121,7 +129,7 @@
   }
 
   function fillFinanceSettingsForm(settings) {
-    const cfg = settings || DEFAULT_FINANCE;
+    var cfg = settings || DEFAULT_FINANCE;
     setInput('cfg-commission', cfg.commission_percent);
     setInput('cfg-fixed-fee', cfg.fixed_fee_amount);
     setInput('cfg-service-fee', cfg.service_fee_percent);
@@ -130,10 +138,10 @@
 
   async function saveFinanceSettingsToAccount() {
     if (!hasSupabase()) return setFinanceStatus('Supabase não conectado.', true);
-    const user = await getCurrentUser();
+    var user = await getCurrentUser();
     if (!user) return setFinanceStatus('Faça login para salvar na conta.', true);
 
-    const payload = {
+    var payload = {
       user_id: user.id,
       shop_id: getSelectedShopIdOrNull(),
       marketplace: 'shopee',
@@ -146,13 +154,10 @@
       updated_at: new Date().toISOString()
     };
 
-    const existingId = state.financeSettings && state.financeSettings.id;
-    let result;
-    if (existingId) {
-      result = await supabaseClient.from('commerce_fee_settings').update(payload).eq('id', existingId).eq('user_id', user.id).select('*').single();
-    } else {
-      result = await supabaseClient.from('commerce_fee_settings').insert(payload).select('*').single();
-    }
+    var existingId = state.financeSettings && state.financeSettings.id;
+    var result = existingId
+      ? await supabaseClient.from('commerce_fee_settings').update(payload).eq('id', existingId).eq('user_id', user.id).select('*').single()
+      : await supabaseClient.from('commerce_fee_settings').insert(payload).select('*').single();
     if (result.error) throw result.error;
     state.financeSettings = normalizeFinanceSettings(result.data);
     fillFinanceSettingsForm(state.financeSettings);
@@ -161,7 +166,7 @@
   }
 
   function setFinanceStatus(message, isError) {
-    const el = document.getElementById('cfg-finance-status');
+    var el = document.getElementById('cfg-finance-status');
     if (!el) return;
     el.textContent = message;
     el.className = 'commerce-settings-status ' + (isError ? 'error' : 'success');
@@ -169,18 +174,18 @@
 
   async function openProductAnalyzerV2(itemId) {
     try {
-      const item = await getProduct(itemId);
-      if (!item) return;
-      const variations = await fetchVariations(item.item_id);
-      const selectedVariation = variations[0] || null;
-      const range = getRangeFromPreset('30');
-      const context = { item, variations, selectedVariation, range, periodPreset: '30', dailySales: [], dailyAds: [], adsOverride: null };
+      var item = await getProduct(itemId);
+      if (!item) return showPageMessage('Produto não encontrado para análise.', true);
+      var variations = await fetchVariations(item.item_id);
+      var selectedVariation = variations[0] || null;
+      var range = getRangeFromPreset('30');
+      var context = { item: item, variations: variations, selectedVariation: selectedVariation, range: range, periodPreset: '30', dailySales: [], dailyAds: [], adsOverride: null };
       state.lastProductContext = context;
       await Promise.all([ensureFinanceSettings(), hydrateModalContext(context)]);
       renderModal(context);
     } catch (error) {
       console.error('Erro ao abrir analisador v2:', error);
-      alert('Erro ao abrir produto: ' + error.message);
+      showPageMessage('Erro ao abrir produto: ' + error.message, true);
     }
   }
 
@@ -190,69 +195,68 @@
   }
 
   async function hydrateModalContext(context) {
-    const promises = [
+    var results = await Promise.all([
       fetchDailySales(context.item.item_id, context.range),
       fetchDailyAds(context.item.item_id, context.range),
       fetchAdsOverride(context.item, context.selectedVariation, context.range)
-    ];
-    const [sales, ads, override] = await Promise.all(promises);
-    context.dailySales = sales;
-    context.dailyAds = ads;
-    context.adsOverride = override;
+    ]);
+    context.dailySales = results[0];
+    context.dailyAds = results[1];
+    context.adsOverride = results[2];
   }
 
   async function getProduct(itemId) {
-    const local = (window.productPerformanceData || window.shopeeProductsData || []).find(function (row) {
+    var local = (window.productPerformanceData || window.shopeeProductsData || []).find(function (row) {
       return String(row.item_id) === String(itemId);
     });
     if (local) return local;
     if (!hasSupabase()) return null;
-    const { data, error } = await supabaseClient.from('vw_product_performance_summary').select('*').eq('item_id', itemId).limit(1).maybeSingle();
-    if (error) throw error;
-    return data;
+    var result = await supabaseClient.from('vw_product_performance_summary').select('*').eq('item_id', itemId).limit(1).maybeSingle();
+    if (result.error) throw result.error;
+    return result.data;
   }
 
   async function fetchVariations(itemId) {
     if (!hasSupabase()) return [];
-    const { data, error } = await supabaseClient
+    var result = await supabaseClient
       .from('vw_product_variation_performance_summary')
       .select('*')
       .eq('item_id', itemId)
       .order('units_sold_30d', { ascending: false, nullsFirst: false });
-    if (error) throw error;
-    return data || [];
+    if (result.error) throw result.error;
+    return result.data || [];
   }
 
   async function fetchDailySales(itemId, range) {
     if (!hasSupabase()) return [];
-    const { data, error } = await supabaseClient
+    var result = await supabaseClient
       .from('vw_product_performance_daily')
       .select('*')
       .eq('item_id', itemId)
       .gte('order_date', range.start)
       .lte('order_date', range.end)
       .order('order_date', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    if (result.error) throw result.error;
+    return result.data || [];
   }
 
   async function fetchDailyAds(itemId, range) {
     if (!hasSupabase()) return [];
-    const { data, error } = await supabaseClient
+    var result = await supabaseClient
       .from('vw_product_ads_daily')
       .select('*')
       .eq('item_id', itemId)
       .gte('performance_date', range.start)
       .lte('performance_date', range.end)
       .order('performance_date', { ascending: true });
-    if (error) throw error;
-    return data || [];
+    if (result.error) throw result.error;
+    return result.data || [];
   }
 
   async function fetchAdsOverride(item, variation, range) {
-    const user = await getCurrentUser();
+    var user = await getCurrentUser();
     if (!hasSupabase() || !user) return null;
-    let query = supabaseClient
+    var query = supabaseClient
       .from('ads_cost_overrides')
       .select('*')
       .eq('user_id', user.id)
@@ -263,18 +267,17 @@
       .limit(1);
     if (variation && variation.model_id) query = query.eq('model_id', variation.model_id);
     else query = query.is('model_id', null);
-    const { data, error } = await query;
-    if (error) throw error;
-    return (data || [])[0] || null;
+    var result = await query;
+    if (result.error) throw result.error;
+    return (result.data || [])[0] || null;
   }
 
   function renderModal(context) {
-    const old = document.getElementById('product-modal');
+    var old = document.getElementById('product-modal');
     if (old) old.remove();
 
-    const item = context.item;
-    const variation = context.selectedVariation;
-    const modal = document.createElement('div');
+    var item = context.item;
+    var modal = document.createElement('div');
     modal.id = 'product-modal';
     modal.className = 'modal-overlay jv-product-modal product-ads-v2-modal';
     modal.innerHTML = [
@@ -300,6 +303,7 @@
     document.body.appendChild(modal);
     bindModalEvents(context);
     updateProfitBlock(context);
+    hydrateImageQuality(modal);
     modal.style.display = 'flex';
     state.currentModal = modal;
     if (window.lucide) lucide.createIcons();
@@ -310,13 +314,13 @@
   }
 
   function renderOverview(context) {
-    const item = context.item;
-    const variations = context.variations;
-    const variation = context.selectedVariation;
-    const selector = variations.length ? [
+    var item = context.item;
+    var variations = context.variations;
+    var variation = context.selectedVariation;
+    var selector = variations.length ? [
       '<label class="ads-variation-select"><span>Variação analisada</span><select id="v2-variation-select" class="select-field">',
       variations.map(function (row) {
-        const selected = variation && String(variation.model_id) === String(row.model_id) ? 'selected' : '';
+        var selected = variation && String(variation.model_id) === String(row.model_id) ? 'selected' : '';
         return '<option value="' + html(row.model_id) + '" ' + selected + '>' + html((row.model_name || 'Variação') + ' · ' + (row.model_sku || 'Sem SKU')) + '</option>';
       }).join(''),
       '</select></label>'
@@ -338,25 +342,31 @@
       editableAdsMetric(context),
       '</div>',
       '<div id="product-profit-result" class="ads-finance-result"></div>',
+      '<div id="product-modal-status" class="product-modal-status"></div>',
       '</div>',
       '</section>'
     ].join('');
   }
 
   function renderPeriodControls(context) {
+    var preset = context.periodPreset || '30';
     return [
       '<div class="product-period-controls">',
       '<select id="product-period-select" class="select-field">',
-      '<option value="7">7d</option>',
-      '<option value="15">15d</option>',
-      '<option value="30" selected>30d</option>',
-      '<option value="365">1y</option>',
-      '<option value="custom">Personalizado</option>',
+      option('7', '7d', preset),
+      option('15', '15d', preset),
+      option('30', '30d', preset),
+      option('365', '1y', preset),
+      option('custom', 'Personalizado', preset),
       '</select>',
-      '<input id="product-period-start" type="date" value="' + html(context.range.start) + '" hidden>',
-      '<input id="product-period-end" type="date" value="' + html(context.range.end) + '" hidden>',
+      '<input id="product-period-start" type="date" value="' + html(context.range.start) + '" ' + (preset === 'custom' ? '' : 'hidden') + '>',
+      '<input id="product-period-end" type="date" value="' + html(context.range.end) + '" ' + (preset === 'custom' ? '' : 'hidden') + '>',
       '</div>'
     ].join('');
+  }
+
+  function option(value, label, current) {
+    return '<option value="' + value + '" ' + (String(value) === String(current) ? 'selected' : '') + '>' + label + '</option>';
   }
 
   function readOnlyMetric(label, value) {
@@ -364,21 +374,21 @@
   }
 
   function editableAdsMetric(context) {
-    const realAds = sumRows(context.dailyAds, 'expense');
-    const value = context.adsOverride ? numberValue(context.adsOverride.ads_cost_amount, realAds) : realAds;
-    const source = context.adsOverride ? 'Editado na conta' : 'API Shopee';
+    var realAds = sumRows(context.dailyAds, 'expense');
+    var value = context.adsOverride ? numberValue(context.adsOverride.ads_cost_amount, realAds) : realAds;
+    var source = context.adsOverride ? 'Editado na conta' : 'API Shopee';
     return '<label class="ads-number-field product-ads-cost-field"><span>Ads Shopee real <small>' + html(source) + '</small></span><input id="product-ads-cost-input" type="number" min="0" step="0.01" value="' + value.toFixed(2) + '"><button id="product-save-ads-cost" type="button" class="btn-secondary">Salvar ajuste</button></label>';
   }
 
   function renderDiagnosis(context) {
-    const ads = sumRows(context.dailyAds, 'expense');
-    const sales = sumRows(context.dailySales, 'units_sold');
-    const revenue = sumRows(context.dailySales, 'gross_revenue');
-    const cost = selectedCost(context.item, context.selectedVariation);
-    const price = selectedPrice(context.item, context.selectedVariation);
-    const insights = [
+    var ads = sumRows(context.dailyAds, 'expense');
+    var sales = sumRows(context.dailySales, 'units_sold');
+    var revenue = sumRows(context.dailySales, 'gross_revenue');
+    var cost = selectedCost(context.item, context.selectedVariation);
+    var price = selectedPrice(context.item, context.selectedVariation);
+    var insights = [
       ['Demanda', sales > 0 ? 'Produto vendeu no período' : 'Sem venda no período', sales > 0 ? sales + ' unidades e ' + currency(revenue) + ' em receita.' : 'Revisar oferta antes de aumentar investimento.'],
-      ['Ads Shopee', ads > 0 ? 'Ads encontrado pela API' : 'Sem custo de Ads no período', ads > 0 ? 'Despesa real: ' + currency(ads) + '.' : 'Clique em sincronizar Ads se ainda não atualizou o período.'],
+      ['Ads Shopee', ads > 0 ? 'Ads encontrado pela API' : 'Sem custo de Ads no período', ads > 0 ? 'Despesa real: ' + currency(ads) + '.' : 'Sincronize Ads por produto em Configurações para preencher este dado real.'],
       ['Margem', cost > 0 ? 'Custo UPSeller encontrado' : 'Custo ausente no UPSeller', cost > 0 ? 'Custo base: ' + currency(cost) + ' para preço de ' + currency(price) + '.' : 'Importar/atualizar estoque UPSeller para fechar margem.']
     ];
     return '<section id="product-tab-diagnosis" class="tab-content"><div class="ads-diagnosis-grid">' + insights.map(function (row) {
@@ -387,16 +397,60 @@
   }
 
   function renderMedia(context) {
-    const attrs = normalizeAttributes(context.item.attributes_json);
-    const images = normalizeImages(context.item.images_json, context.item.image_url);
+    var attrs = normalizeAttributes(context.item.attributes_json);
+    var images = normalizeImages(context.item.images_json, context.item.image_url);
     return [
       '<section id="product-tab-media" class="tab-content">',
       '<div class="ads-section-title"><h4>Mídia</h4><span>' + images.length + ' imagem(ns)</span></div>',
-      '<div class="ads-media-grid">' + images.map(function (url) { return '<div class="ads-media-item"><img src="' + html(safeImage(url)) + '" alt="Imagem"><span>Imagem sincronizada</span></div>'; }).join('') + '</div>',
+      '<div class="ads-media-grid">' + (images.map(function (url, index) { return renderImageQualityCard(url, index); }).join('') || '<div class="ads-empty-block">Nenhuma imagem sincronizada.</div>') + '</div>',
       '<div class="ads-section-title"><h4>Ficha Técnica (Atributos)</h4><span>' + attrs.length + ' atributo(s)</span></div>',
       '<div class="ads-attributes-grid">' + (attrs.map(function (attr) { return '<div class="attr-item"><span>' + html(attr.name) + '</span><strong>' + html(attr.value) + '</strong></div>'; }).join('') || '<div class="ads-empty-block">Nenhum atributo sincronizado.</div>') + '</div>',
       '</section>'
     ].join('');
+  }
+
+  function renderImageQualityCard(url, index) {
+    return [
+      '<div class="ads-media-item" data-image-quality-card="true">',
+      '<img src="' + html(safeImage(url)) + '" loading="lazy" alt="Imagem ' + (index + 1) + '">',
+      '<div class="ads-media-quality-meta quality-pending">',
+      '<strong>Verificando resolução</strong>',
+      '<span>Imagem sincronizada</span>',
+      '</div>',
+      '</div>'
+    ].join('');
+  }
+
+  function hydrateImageQuality(root) {
+    root.querySelectorAll('[data-image-quality-card="true"]').forEach(function (card) {
+      var img = card.querySelector('img');
+      var meta = card.querySelector('.ads-media-quality-meta');
+      if (!img || !meta) return;
+      var update = function () {
+        var width = img.naturalWidth || 0;
+        var height = img.naturalHeight || 0;
+        if (!width || !height) {
+          setImageQuality(meta, 'low', 'Baixa', 'Não foi possível ler a resolução');
+          return;
+        }
+        var shortest = Math.min(width, height);
+        var ratioDiff = Math.abs(width - height) / Math.max(width, height);
+        var isSquareEnough = ratioDiff <= 0.12;
+        if (shortest >= 1000 && isSquareEnough) setImageQuality(meta, 'high', 'Alta', width + ' x ' + height + ' px');
+        else if (shortest >= 700) setImageQuality(meta, 'medium', 'Média', width + ' x ' + height + ' px' + (isSquareEnough ? '' : ' · proporção irregular'));
+        else setImageQuality(meta, 'low', 'Baixa', width + ' x ' + height + ' px');
+      };
+      if (img.complete) update();
+      else {
+        img.addEventListener('load', update, { once: true });
+        img.addEventListener('error', function () { setImageQuality(meta, 'low', 'Erro', 'Imagem não carregou'); }, { once: true });
+      }
+    });
+  }
+
+  function setImageQuality(meta, level, label, detail) {
+    meta.className = 'ads-media-quality-meta quality-' + level;
+    meta.innerHTML = '<strong>' + html(label) + '</strong><span>' + html(detail) + '</span>';
   }
 
   function renderSalesAds(context) {
@@ -408,41 +462,90 @@
       metric('Ads Shopee', currency(sumRows(context.dailyAds, 'expense'))),
       metric('ROAS direto', roas(context.dailyAds, 'direct_gmv')),
       '</div>',
+      '<div class="ads-section-title"><h4>Histórico horizontal de vendas e Ads</h4><span>' + html(context.range.start) + ' até ' + html(context.range.end) + '</span></div>',
+      renderHorizontalSalesAdsChart(context),
       '<div class="ads-section-title"><h4>Ads por produto via Shopee API</h4><span>Campanhas ligadas a item_id</span></div>',
       renderAdsTable(context.dailyAds),
       '</section>'
     ].join('');
   }
 
+  function renderHorizontalSalesAdsChart(context) {
+    var rows = buildHorizontalRows(context);
+    if (!rows.length) return '<div class="ads-empty-block">Sem vendas ou Ads no período selecionado.</div>';
+    var maxUnits = Math.max(1, Math.max.apply(null, rows.map(function (row) { return row.units; })));
+    var maxAds = Math.max(1, Math.max.apply(null, rows.map(function (row) { return row.ads; })));
+    return [
+      '<div class="sales-ads-horizontal-chart">',
+      rows.map(function (row) {
+        var salesPct = Math.max(2, Math.round((row.units / maxUnits) * 100));
+        var adsPct = row.ads > 0 ? Math.max(2, Math.round((row.ads / maxAds) * 100)) : 0;
+        return [
+          '<div class="horizontal-chart-row">',
+          '<span class="date">' + html(formatDate(row.date)) + '</span>',
+          '<div class="horizontal-chart-track" title="' + html(row.units + ' un · ' + currency(row.revenue) + ' receita · ' + currency(row.ads) + ' Ads') + '">',
+          '<i class="sales-bar" style="width:' + salesPct + '%"></i>',
+          '<i class="ads-bar" style="width:' + adsPct + '%"></i>',
+          '</div>',
+          '<strong>' + integer(row.units) + ' un</strong>',
+          '<em>' + currency(row.revenue) + '</em>',
+          '</div>'
+        ].join('');
+      }).join(''),
+      '<div class="horizontal-chart-legend"><span><i></i> Vendas</span><span><i></i> Ads</span></div>',
+      '</div>'
+    ].join('');
+  }
+
+  function buildHorizontalRows(context) {
+    var map = new Map();
+    (context.dailySales || []).forEach(function (row) {
+      var key = String(row.order_date || '').slice(0, 10);
+      if (!key) return;
+      var current = map.get(key) || { date: key, units: 0, revenue: 0, ads: 0 };
+      current.units += numberValue(row.units_sold, 0);
+      current.revenue += numberValue(row.gross_revenue, 0);
+      map.set(key, current);
+    });
+    (context.dailyAds || []).forEach(function (row) {
+      var key = String(row.performance_date || '').slice(0, 10);
+      if (!key) return;
+      var current = map.get(key) || { date: key, units: 0, revenue: 0, ads: 0 };
+      current.ads += numberValue(row.expense, 0);
+      map.set(key, current);
+    });
+    return Array.from(map.values()).sort(function (a, b) { return b.date.localeCompare(a.date); });
+  }
+
   function bindModalEvents(context) {
-    const modal = document.getElementById('product-modal');
+    var modal = document.getElementById('product-modal');
     if (!modal) return;
-    const close = modal.querySelector('[data-close-modal]');
+    var close = modal.querySelector('[data-close-modal]');
     if (close) close.addEventListener('click', function () { modal.remove(); state.currentModal = null; });
 
     modal.querySelectorAll('[data-product-tab]').forEach(function (button) {
       button.addEventListener('click', function () {
-        const tabId = button.getAttribute('data-product-tab');
+        var tabId = button.getAttribute('data-product-tab');
         modal.querySelectorAll('.tab-btn').forEach(function (btn) { btn.classList.remove('active'); });
         modal.querySelectorAll('.tab-content').forEach(function (tab) { tab.classList.remove('active'); });
         button.classList.add('active');
-        const tab = modal.querySelector('#product-tab-' + tabId);
+        var tab = modal.querySelector('#product-tab-' + tabId);
         if (tab) tab.classList.add('active');
       });
     });
 
-    const variationSelect = document.getElementById('v2-variation-select');
+    var variationSelect = document.getElementById('v2-variation-select');
     if (variationSelect) variationSelect.addEventListener('change', async function () {
       context.selectedVariation = context.variations.find(function (row) { return String(row.model_id) === String(variationSelect.value); }) || null;
       context.adsOverride = await fetchAdsOverride(context.item, context.selectedVariation, context.range);
       renderModal(context);
     });
 
-    const periodSelect = document.getElementById('product-period-select');
-    const startInput = document.getElementById('product-period-start');
-    const endInput = document.getElementById('product-period-end');
+    var periodSelect = document.getElementById('product-period-select');
+    var startInput = document.getElementById('product-period-start');
+    var endInput = document.getElementById('product-period-end');
     if (periodSelect) periodSelect.addEventListener('change', function () {
-      const custom = periodSelect.value === 'custom';
+      var custom = periodSelect.value === 'custom';
       if (startInput) startInput.hidden = !custom;
       if (endInput) endInput.hidden = !custom;
       if (!custom) changePeriod(context, periodSelect.value);
@@ -455,9 +558,9 @@
       });
     });
 
-    const saveAds = document.getElementById('product-save-ads-cost');
+    var saveAds = document.getElementById('product-save-ads-cost');
     if (saveAds) saveAds.addEventListener('click', function () { saveAdsOverride(context); });
-    const adsInput = document.getElementById('product-ads-cost-input');
+    var adsInput = document.getElementById('product-ads-cost-input');
     if (adsInput) adsInput.addEventListener('input', function () { updateProfitBlock(context); });
   }
 
@@ -469,13 +572,13 @@
   }
 
   async function saveAdsOverride(context) {
-    const user = await getCurrentUser();
-    if (!user) return alert('Faça login para salvar ajuste de Ads na conta.');
-    const value = readNumber('product-ads-cost-input', 0);
-    const variation = context.selectedVariation;
-    const payload = {
+    var user = await getCurrentUser();
+    if (!user) return setProductStatus('Faça login para salvar ajuste de Ads na conta.', true);
+    var value = readNumber('product-ads-cost-input', 0);
+    var variation = context.selectedVariation;
+    var payload = {
       user_id: user.id,
-      shop_id: context.item.shop_id || getSelectedShopIdOrNull(),
+      shop_id: context.item.shop_id || getSelectedShopIdOrNull() || getFirstShopIdFromSelect(),
       item_id: context.item.item_id,
       model_id: variation && variation.model_id ? variation.model_id : null,
       period_start: context.range.start,
@@ -485,35 +588,31 @@
       notes: 'Ajuste manual no Analisador de Anúncios',
       updated_at: new Date().toISOString()
     };
-    const existing = context.adsOverride;
-    let result;
-    if (existing && existing.id) {
-      result = await supabaseClient.from('ads_cost_overrides').update(payload).eq('id', existing.id).eq('user_id', user.id).select('*').single();
-    } else {
-      result = await supabaseClient.from('ads_cost_overrides').insert(payload).select('*').single();
-    }
-    if (result.error) return alert('Falha ao salvar Ads: ' + result.error.message);
+    var result = context.adsOverride && context.adsOverride.id
+      ? await supabaseClient.from('ads_cost_overrides').update(payload).eq('id', context.adsOverride.id).eq('user_id', user.id).select('*').single()
+      : await supabaseClient.from('ads_cost_overrides').insert(payload).select('*').single();
+    if (result.error) return setProductStatus('Falha ao salvar Ads: ' + result.error.message, true);
     context.adsOverride = result.data;
     updateProfitBlock(context);
-    alert('Custo de Ads salvo na sua conta.');
+    setProductStatus('Custo de Ads salvo na sua conta.', false);
   }
 
   function updateProfitBlock(context) {
-    const result = document.getElementById('product-profit-result');
+    var result = document.getElementById('product-profit-result');
     if (!result) return;
-    const finance = state.financeSettings || DEFAULT_FINANCE;
-    const price = selectedPrice(context.item, context.selectedVariation);
-    const cost = selectedCost(context.item, context.selectedVariation);
-    const realAds = sumRows(context.dailyAds, 'expense');
-    const adsCost = readNumber('product-ads-cost-input', context.adsOverride ? numberValue(context.adsOverride.ads_cost_amount, realAds) : realAds);
-    const units = Math.max(sumRows(context.dailySales, 'units_sold'), 1);
-    const adsPerUnit = adsCost / units;
-    const commission = price * (numberValue(finance.commission_percent, 0) / 100);
-    const service = price * (numberValue(finance.service_fee_percent, 0) / 100);
-    const tax = price * (numberValue(finance.tax_percent, 0) / 100);
-    const fixed = numberValue(finance.fixed_fee_amount, 0);
-    const unitProfit = price - commission - fixed - service - tax - cost - adsPerUnit;
-    const margin = price > 0 ? (unitProfit / price) * 100 : 0;
+    var finance = state.financeSettings || DEFAULT_FINANCE;
+    var price = selectedPrice(context.item, context.selectedVariation);
+    var cost = selectedCost(context.item, context.selectedVariation);
+    var realAds = sumRows(context.dailyAds, 'expense');
+    var adsCost = readNumber('product-ads-cost-input', context.adsOverride ? numberValue(context.adsOverride.ads_cost_amount, realAds) : realAds);
+    var units = Math.max(sumRows(context.dailySales, 'units_sold'), 1);
+    var adsPerUnit = adsCost / units;
+    var commission = price * (numberValue(finance.commission_percent, 0) / 100);
+    var service = price * (numberValue(finance.service_fee_percent, 0) / 100);
+    var tax = price * (numberValue(finance.tax_percent, 0) / 100);
+    var fixed = numberValue(finance.fixed_fee_amount, 0);
+    var unitProfit = price - commission - fixed - service - tax - cost - adsPerUnit;
+    var margin = price > 0 ? (unitProfit / price) * 100 : 0;
     result.innerHTML = [
       metric('Lucro unitário', currency(unitProfit), unitProfit >= 0 ? 'positive' : 'negative'),
       metric('Margem final', margin.toFixed(1) + '%', margin >= 15 ? 'positive' : margin >= 0 ? 'warning' : 'negative'),
@@ -524,12 +623,12 @@
 
   async function syncProductAdsFromConfig(button) {
     if (!hasSupabase()) return setFinanceStatus('Supabase não conectado.', true);
-    const session = (await supabaseClient.auth.getSession()).data.session;
+    var session = (await supabaseClient.auth.getSession()).data.session;
     if (!session) return setFinanceStatus('Faça login para sincronizar Ads.', true);
-    const shopId = getSelectedShopIdOrNull() || ((window.userShops || [])[0] && (window.userShops || [])[0].shop_id);
+    var shopId = getSelectedShopIdOrNull() || getFirstShopIdFromSelect();
     if (!shopId) return setFinanceStatus('Selecione ou vincule uma loja Shopee.', true);
 
-    const original = button.innerHTML;
+    var original = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<i data-lucide="loader-2" class="spin"></i> Sincronizando...';
     if (window.lucide) lucide.createIcons();
@@ -546,40 +645,40 @@
   }
 
   async function callProductAdsSync(shopId, days) {
-    const session = (await supabaseClient.auth.getSession()).data.session;
+    var session = (await supabaseClient.auth.getSession()).data.session;
     if (!session) throw new Error('Usuário não autenticado.');
-    const base = String(supabaseUrl || '').replace(/\/$/, '');
-    const response = await fetch(base + '/functions/v1/' + PRODUCT_ADS_FUNCTION, {
+    var base = String(supabaseUrl || '').replace(/\/$/, '');
+    var response = await fetch(base + '/functions/v1/' + PRODUCT_ADS_FUNCTION, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
       body: JSON.stringify({ shop_id: Number(shopId), days: days || 30 })
     });
-    const json = await response.json().catch(function () { return {}; });
+    var json = await response.json().catch(function () { return {}; });
     if (!response.ok || !json.ok) throw new Error(json.error || ('HTTP ' + response.status));
     return json.result;
   }
 
   function renderComboChart(rows) {
-    const daily = consolidateSales(rows);
+    var daily = consolidateSales(rows);
     if (!daily.length) return '<div class="ads-empty-block">Sem vendas no período selecionado.</div>';
-    const width = 760;
-    const height = 260;
-    const pad = 34;
-    const maxUnits = Math.max(1, Math.max.apply(null, daily.map(function (row) { return row.units; })));
-    const maxRevenue = Math.max(1, Math.max.apply(null, daily.map(function (row) { return row.revenue; })));
-    const barSlot = (width - pad * 2) / daily.length;
-    const points = [];
-    const bars = daily.map(function (row, index) {
-      const x = pad + index * barSlot;
-      const barHeight = (row.units / maxUnits) * (height - pad * 2);
-      const y = height - pad - barHeight;
-      const lineY = height - pad - ((row.revenue / maxRevenue) * (height - pad * 2));
+    var width = 760;
+    var height = 260;
+    var pad = 34;
+    var maxUnits = Math.max(1, Math.max.apply(null, daily.map(function (row) { return row.units; })));
+    var maxRevenue = Math.max(1, Math.max.apply(null, daily.map(function (row) { return row.revenue; })));
+    var barSlot = (width - pad * 2) / daily.length;
+    var points = [];
+    var bars = daily.map(function (row, index) {
+      var x = pad + index * barSlot;
+      var barHeight = (row.units / maxUnits) * (height - pad * 2);
+      var y = height - pad - barHeight;
+      var lineY = height - pad - ((row.revenue / maxRevenue) * (height - pad * 2));
       points.push([x + barSlot / 2, lineY].join(','));
       return '<rect x="' + (x + 2) + '" y="' + y + '" width="' + Math.max(2, barSlot - 4) + '" height="' + barHeight + '" rx="3"><title>' + html(formatDate(row.date) + ' · ' + row.units + ' un · ' + currency(row.revenue)) + '</title></rect>';
     }).join('');
-    const labels = daily.filter(function (_, index) { return index === 0 || index === daily.length - 1 || index % Math.ceil(daily.length / 6) === 0; }).map(function (row, index) {
-      const originalIndex = daily.indexOf(row);
-      const x = pad + originalIndex * barSlot + barSlot / 2;
+    var labels = daily.filter(function (_, index) { return index === 0 || index === daily.length - 1 || index % Math.ceil(daily.length / 6) === 0; }).map(function (row) {
+      var originalIndex = daily.indexOf(row);
+      var x = pad + originalIndex * barSlot + barSlot / 2;
       return '<text x="' + x + '" y="' + (height - 8) + '" text-anchor="middle">' + html(formatDate(row.date)) + '</text>';
     }).join('');
     return '<svg viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Vendas e receita"><g class="combo-bars">' + bars + '</g><polyline class="combo-line" fill="none" points="' + points.join(' ') + '"></polyline><g class="combo-labels">' + labels + '</g></svg><div class="combo-legend"><span><i></i> Vendas</span><span><i></i> Receita</span></div>';
@@ -593,11 +692,11 @@
   }
 
   function consolidateSales(rows) {
-    const map = new Map();
-    rows.forEach(function (row) {
-      const date = String(row.order_date || '').slice(0, 10);
+    var map = new Map();
+    (rows || []).forEach(function (row) {
+      var date = String(row.order_date || '').slice(0, 10);
       if (!date) return;
-      const current = map.get(date) || { date: date, units: 0, revenue: 0 };
+      var current = map.get(date) || { date: date, units: 0, revenue: 0 };
       current.units += numberValue(row.units_sold, 0);
       current.revenue += numberValue(row.gross_revenue, 0);
       map.set(date, current);
@@ -606,32 +705,43 @@
   }
 
   function getRangeFromPreset(preset) {
-    const end = new Date();
+    var end = new Date();
     end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    const days = preset === '365' ? 365 : Number(preset || 30);
+    var start = new Date(end);
+    var days = preset === '365' ? 365 : Number(preset || 30);
     start.setDate(end.getDate() - (days - 1));
     return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
   }
 
   function selectedPrice(item, variation) {
     if (variation) {
-      const current = numberValue(variation.current_price, 0);
-      if (current > 0) return current;
-      const units = numberValue(variation.units_sold_30d, 0);
-      const revenue = numberValue(variation.revenue_30d, 0);
-      if (units > 0 && revenue > 0) return revenue / units;
+      var variationPrice = firstPositive(variation.current_price, variation.discount_price, variation.model_discounted_price, variation.price_with_discount, variation.sale_price);
+      if (variationPrice > 0) return variationPrice;
+      var vUnits = numberValue(variation.units_sold_30d, 0);
+      var vRevenue = numberValue(variation.revenue_30d, 0);
+      if (vUnits > 0 && vRevenue > 0) return vRevenue / vUnits;
     }
-    const current = numberValue(item.current_price, 0);
-    if (current > 0) return current;
-    const units30 = numberValue(item.sales_30d, 0);
-    const revenue30 = numberValue(item.revenue_30d, 0);
+    var itemPrice = firstPositive(item.current_price, item.discount_price, item.price_with_discount, item.sale_price);
+    if (itemPrice > 0) return itemPrice;
+    var units30 = numberValue(item.sales_30d, 0);
+    var revenue30 = numberValue(item.revenue_30d, 0);
     return units30 > 0 && revenue30 > 0 ? revenue30 / units30 : 0;
   }
 
   function selectedCost(item, variation) {
-    if (variation && numberValue(variation.upseller_average_cost, 0) > 0) return numberValue(variation.upseller_average_cost, 0);
-    return numberValue(item.upseller_average_cost, 0);
+    if (variation) {
+      var variationCost = firstPositive(variation.upseller_average_cost, variation.average_cost, variation.unit_cost, variation.cost_price);
+      if (variationCost > 0) return variationCost;
+    }
+    return firstPositive(item.upseller_average_cost, item.average_cost, item.unit_cost, item.cost_price);
+  }
+
+  function firstPositive() {
+    for (var i = 0; i < arguments.length; i += 1) {
+      var value = numberValue(arguments[i], 0);
+      if (value > 0) return value;
+    }
+    return 0;
   }
 
   function getSkuLabel(item, variation) {
@@ -644,8 +754,8 @@
   }
 
   function roas(rows, revenueKey) {
-    const expense = sumRows(rows, 'expense');
-    const revenue = sumRows(rows, revenueKey);
+    var expense = sumRows(rows, 'expense');
+    var revenue = sumRows(rows, revenueKey);
     return expense > 0 ? (revenue / expense).toFixed(2) : '—';
   }
 
@@ -654,23 +764,23 @@
   }
 
   function normalizeImages(value, cover) {
-    const parsed = parseMaybeJson(value);
-    const out = [];
+    var parsed = parseMaybeJson(value);
+    var out = [];
     if (cover) out.push(cover);
     if (Array.isArray(parsed)) parsed.forEach(function (img) {
-      const url = typeof img === 'string' ? img : img && (img.url || img.image_url || img.imageUrl);
-      if (url && !out.includes(url)) out.push(url);
+      var url = typeof img === 'string' ? img : img && (img.url || img.image_url || img.imageUrl || img.display_image || img.thumbnail_url);
+      if (url && out.indexOf(url) === -1) out.push(url);
     });
     return out;
   }
 
   function normalizeAttributes(value) {
-    const parsed = parseMaybeJson(value);
-    const attrs = Array.isArray(parsed) ? parsed : [];
+    var parsed = parseMaybeJson(value);
+    var attrs = Array.isArray(parsed) ? parsed : [];
     return attrs.map(function (attr, index) {
-      const name = attr.display_attribute_name || attr.attribute_name || attr.name || attr.original_attribute_name || ('Atributo ' + (index + 1));
-      const list = parseMaybeJson(attr.attribute_value_list || attr.values || attr.attribute_values);
-      let val = '';
+      var name = attr.display_attribute_name || attr.attribute_name || attr.name || attr.original_attribute_name || ('Atributo ' + (index + 1));
+      var list = parseMaybeJson(attr.attribute_value_list || attr.values || attr.attribute_values);
+      var val = '';
       if (Array.isArray(list)) val = list.map(function (entry) {
         if (!entry) return '';
         if (typeof entry !== 'object') return String(entry);
@@ -691,15 +801,24 @@
 
   async function getCurrentUser() {
     if (!hasSupabase()) return null;
-    const { data } = await supabaseClient.auth.getUser();
-    return data && data.user ? data.user : null;
+    var result = await supabaseClient.auth.getUser();
+    return result.data && result.data.user ? result.data.user : null;
   }
 
   function getSelectedShopIdOrNull() {
     if (typeof selectedShop !== 'undefined' && selectedShop && selectedShop !== 'all') return Number(selectedShop);
-    const select = document.getElementById('select-shop');
+    var select = document.getElementById('select-shop');
     if (select && select.value && select.value !== 'all') return Number(select.value);
     return null;
+  }
+
+  function getFirstShopIdFromSelect() {
+    var select = document.getElementById('select-shop');
+    if (!select) return null;
+    var optionNode = Array.prototype.find.call(select.options || [], function (optionItem) {
+      return optionItem.value && optionItem.value !== 'all';
+    });
+    return optionNode ? Number(optionNode.value) : null;
   }
 
   function hasSupabase() {
@@ -709,26 +828,26 @@
   function safeImage(url) {
     if (!url) return 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?w=120&auto=format&fit=crop&q=60';
     try {
-      const parsed = new URL(String(url), window.location.href);
-      return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+      var parsed = new URL(String(url), window.location.href);
+      return ['http:', 'https:'].indexOf(parsed.protocol) >= 0 ? parsed.href : '';
     } catch (error) {
       return '';
     }
   }
 
   function setInput(id, value) {
-    const input = document.getElementById(id);
+    var input = document.getElementById(id);
     if (input) input.value = numberValue(value, 0).toFixed(2);
   }
 
   function readNumber(id, fallback) {
-    const input = document.getElementById(id);
+    var input = document.getElementById(id);
     return input ? numberValue(input.value, fallback) : fallback;
   }
 
   function numberValue(value, fallback) {
     if (value === null || value === undefined || value === '') return fallback || 0;
-    const num = Number(typeof value === 'string' ? value.replace(',', '.') : value);
+    var num = Number(typeof value === 'string' ? value.replace(',', '.') : value);
     return Number.isFinite(num) ? num : (fallback || 0);
   }
 
@@ -742,8 +861,23 @@
   }
 
   function formatDate(value) {
-    const parts = String(value || '').slice(0, 10).split('-');
+    var parts = String(value || '').slice(0, 10).split('-');
     return parts.length === 3 ? parts[2] + '/' + parts[1] : String(value || '-');
+  }
+
+  function setProductStatus(message, isError) {
+    var el = document.getElementById('product-modal-status');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'product-modal-status ' + (isError ? 'error' : 'success');
+  }
+
+  function showPageMessage(message, isError) {
+    var banner = document.getElementById('rls-alert-banner');
+    if (!banner) return;
+    banner.style.display = 'block';
+    banner.className = isError ? 'ads-info-note warning' : 'ads-info-note';
+    banner.textContent = message;
   }
 
   function html(value) {
