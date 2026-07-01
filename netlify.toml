@@ -50,6 +50,11 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/shopee-oauth-callback.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/ads-analyzer.js"
   [headers.values]
     Cache-Control = "no-cache"
