@@ -35,6 +35,16 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/ads-analyzer.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/ads-analyzer.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/hotfix.js"
   [headers.values]
     Cache-Control = "no-cache"
