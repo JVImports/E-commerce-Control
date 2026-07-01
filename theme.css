@@ -1,0 +1,177 @@
+:root[data-theme="light"] {
+  --bg-main: 210deg 24% 96%;
+  --bg-surface: 0deg 0% 100%;
+  --bg-card: 0deg 0% 100%;
+  --border-color: 215deg 18% 84%;
+  --border-color-glow: 255deg 70% 48% / 12%;
+  --text-primary: 222deg 35% 12%;
+  --text-secondary: 217deg 18% 38%;
+  --text-muted: 217deg 14% 52%;
+  --color-primary: 255deg 72% 53%;
+  --color-primary-glow: 255deg 72% 53% / 20%;
+  --color-success: 158deg 70% 36%;
+  --color-success-glow: 158deg 70% 36% / 16%;
+  --color-warning: 35deg 92% 46%;
+  --color-warning-glow: 35deg 92% 46% / 16%;
+  --color-danger: 350deg 78% 48%;
+  --color-danger-glow: 350deg 78% 48% / 16%;
+  --glass-bg: rgba(255, 255, 255, 0.86);
+  --glass-border: rgba(15, 23, 42, 0.10);
+}
+
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid hsl(var(--border-color));
+  background: hsl(var(--bg-surface));
+  color: hsl(var(--text-secondary));
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition-smooth);
+  white-space: nowrap;
+}
+
+.theme-toggle-btn:hover {
+  color: hsl(var(--text-primary));
+  border-color: hsl(var(--color-primary));
+  box-shadow: 0 6px 18px hsl(var(--color-primary-glow));
+  transform: translateY(-1px);
+}
+
+.theme-toggle-btn i {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-theme="light"] body {
+  background: linear-gradient(180deg, #f6f8fb 0%, #eef2f7 100%);
+  color: hsl(var(--text-primary));
+}
+
+:root[data-theme="light"] aside.sidebar,
+:root[data-theme="light"] .profile-section,
+:root[data-theme="light"] .select-field,
+:root[data-theme="light"] .theme-toggle-btn {
+  background-color: hsl(var(--bg-surface));
+}
+
+:root[data-theme="light"] .metric-card,
+:root[data-theme="light"] .panel-card,
+:root[data-theme="light"] .task-widget-container,
+:root[data-theme="light"] .config-container,
+:root[data-theme="light"] .login-card {
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
+}
+
+:root[data-theme="light"] .metric-card:hover {
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.11);
+}
+
+:root[data-theme="light"] .logo-text {
+  background: none;
+  color: hsl(var(--text-primary));
+  -webkit-text-fill-color: hsl(var(--text-primary));
+}
+
+:root[data-theme="light"] .nav-item:hover,
+:root[data-theme="light"] .nav-item.active {
+  background-color: rgba(79, 70, 229, 0.07);
+}
+
+:root[data-theme="light"] .nav-item.active {
+  background: linear-gradient(90deg, rgba(79, 70, 229, 0.12) 0%, rgba(79, 70, 229, 0.03) 100%);
+}
+
+:root[data-theme="light"] table.data-table td {
+  border-bottom-color: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme="light"] table.data-table tr:hover td {
+  background-color: rgba(15, 23, 42, 0.035);
+}
+
+:root[data-theme="light"] .task-item,
+:root[data-theme="light"] .media-item,
+:root[data-theme="light"] .attr-item,
+:root[data-theme="light"] .mapper-container,
+:root[data-theme="light"] .upload-zone {
+  background-color: rgba(15, 23, 42, 0.03);
+  border-color: hsl(var(--border-color));
+}
+
+:root[data-theme="light"] .form-group input,
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] .select-field {
+  background-color: hsl(var(--bg-card)) !important;
+  color: hsl(var(--text-primary)) !important;
+}
+
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder {
+  color: hsl(var(--text-muted));
+}
+
+:root[data-theme="light"] #login-container {
+  background: radial-gradient(circle at top right, rgba(79, 70, 229, 0.13), transparent 58%),
+              radial-gradient(circle at bottom left, rgba(14, 165, 233, 0.12), transparent 55%),
+              #f6f8fb;
+  color: hsl(var(--text-primary));
+}
+
+:root[data-theme="light"] .modal-overlay {
+  background-color: rgba(15, 23, 42, 0.38);
+}
+
+:root[data-theme="light"] .modal-content,
+:root[data-theme="light"] .modal-header,
+:root[data-theme="light"] .modal-tabs {
+  background-color: hsl(var(--bg-card));
+}
+
+:root[data-theme="light"] .modal-close:hover {
+  background-color: rgba(15, 23, 42, 0.08);
+  color: hsl(var(--text-primary));
+}
+
+:root[data-theme="light"] [style*="color: white"] {
+  color: hsl(var(--text-primary)) !important;
+}
+
+:root[data-theme="light"] [style*="background-color: rgba(0, 0, 0, 0.2)"] {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+:root[data-theme="light"] [style*="background: rgba(255,255,255,0.02)"] {
+  background: rgba(15, 23, 42, 0.035) !important;
+}
+
+:root[data-theme="light"] [style*="background-color: rgba(255, 255, 255, 0.02)"] {
+  background-color: rgba(15, 23, 42, 0.035) !important;
+}
+
+:root[data-theme="light"] .btn-secondary {
+  background-color: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-theme="light"] .btn-secondary:hover {
+  background-color: rgba(15, 23, 42, 0.05);
+}
+
+@media (max-width: 768px) {
+  .theme-toggle-btn span {
+    display: none;
+  }
+
+  .theme-toggle-btn {
+    width: 38px;
+    padding: 8px;
+  }
+}
