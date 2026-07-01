@@ -5,6 +5,7 @@
   var ADS_ANALYZER_VERSION = '20260701-ads';
   var ADS_ANALYZER_PRODUCT_VERSION = '20260701-product-ads-v2';
   var LAYOUT_FIX_VERSION = '20260701-layout-fixes';
+  var SHOPEE_MULTI_APP_VERSION = '20260701-shopee-multi-app';
 
   function getStoredTheme() {
     var stored = null;
@@ -120,6 +121,15 @@
     }
   }
 
+  function ensureShopeeMultiAppAssets() {
+    ensureStylesheet('shopee-multi-app-css', 'shopee-multi-app.css?v=' + SHOPEE_MULTI_APP_VERSION);
+    ensureScript('shopee-multi-app-script', 'shopee-multi-app.js?v=' + SHOPEE_MULTI_APP_VERSION, function () {
+      if (window.jvShopeeMultiApp && typeof window.jvShopeeMultiApp.install === 'function') {
+        window.jvShopeeMultiApp.install();
+      }
+    });
+  }
+
   function ensureProductAdsAssets() {
     ensureStylesheet('ads-analyzer-product-ads-css', 'ads-analyzer-product-ads.css?v=' + ADS_ANALYZER_PRODUCT_VERSION);
     ensureScript('ads-analyzer-product-ads-script', 'ads-analyzer-product-ads.js?v=' + ADS_ANALYZER_PRODUCT_VERSION, function () {
@@ -175,6 +185,7 @@
   window.addEventListener('DOMContentLoaded', function () {
     patchApexCharts();
     installThemeToggle();
+    ensureShopeeMultiAppAssets();
     ensureAdsAnalyzerAssets();
     applyTheme(getStoredTheme(), { silent: true });
   });
