@@ -35,12 +35,27 @@
     Cache-Control = "no-cache"
 
 [[headers]]
+  for = "/layout-fixes.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
   for = "/ads-analyzer.js"
   [headers.values]
     Cache-Control = "no-cache"
 
 [[headers]]
   for = "/ads-analyzer.css"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/ads-analyzer-product-ads.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/ads-analyzer-product-ads.css"
   [headers.values]
     Cache-Control = "no-cache"
 
