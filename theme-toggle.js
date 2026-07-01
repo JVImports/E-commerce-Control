@@ -91,15 +91,24 @@
   function ensureScript(id, src, onload) {
     var existing = document.getElementById(id);
     if (existing) {
-      if (typeof onload === 'function') onload();
-      return;
+      if (existing.dataset.loaded === 'true') {
+        if (typeof onload === 'function') onload();
+      } else if (typeof onload === 'function') {
+        existing.addEventListener('load', onload, { once: true });
+      }
+      return existing;
     }
+
     var script = document.createElement('script');
     script.id = id;
     script.src = src;
     script.defer = true;
-    if (typeof onload === 'function') script.onload = onload;
+    script.onload = function () {
+      script.dataset.loaded = 'true';
+      if (typeof onload === 'function') onload();
+    };
     document.body.appendChild(script);
+    return script;
   }
 
   function refreshAdsAnalyzer() {
@@ -127,7 +136,7 @@
       ensureProductAdsAssets();
     });
 
-    if (document.getElementById('ads-analyzer-script')) {
+    if (window.jvAdsAnalyzer) {
       refreshAdsAnalyzer();
       ensureProductAdsAssets();
     }
