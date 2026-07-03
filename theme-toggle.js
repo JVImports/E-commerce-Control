@@ -6,6 +6,7 @@
   var ADS_ANALYZER_PRODUCT_VERSION = '20260701-product-ads-v2';
   var LAYOUT_FIX_VERSION = '20260701-layout-fixes';
   var SHOPEE_MULTI_APP_VERSION = '20260701-shopee-multi-app';
+  var AUTH_SYNC_V2_VERSION = '20260703-auth-sync-v2';
 
   function guardShopeeOAuthCallback() {
     try {
@@ -131,12 +132,21 @@
     }
   }
 
+  function ensureAuthSyncV2Assets() {
+    ensureScript('supabase-auth-sync-v2-script', 'supabase-auth-sync-v2.js?v=' + AUTH_SYNC_V2_VERSION, function () {
+      if (window.jvAuthSyncV2 && typeof window.jvAuthSyncV2.hydrate === 'function') {
+        window.jvAuthSyncV2.hydrate();
+      }
+    });
+  }
+
   function ensureShopeeMultiAppAssets() {
     ensureStylesheet('shopee-multi-app-css', 'shopee-multi-app.css?v=' + SHOPEE_MULTI_APP_VERSION);
     ensureScript('shopee-multi-app-script', 'shopee-multi-app.js?v=' + SHOPEE_MULTI_APP_VERSION, function () {
       if (window.jvShopeeMultiApp && typeof window.jvShopeeMultiApp.install === 'function') {
         window.jvShopeeMultiApp.install();
       }
+      ensureAuthSyncV2Assets();
     });
     ensureScript('shopee-oauth-callback-script', 'shopee-oauth-callback.js?v=' + SHOPEE_MULTI_APP_VERSION);
   }
@@ -198,6 +208,7 @@
     patchApexCharts();
     installThemeToggle();
     ensureShopeeMultiAppAssets();
+    ensureAuthSyncV2Assets();
     ensureAdsAnalyzerAssets();
     applyTheme(getStoredTheme(), { silent: true });
   });
