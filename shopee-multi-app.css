@@ -149,6 +149,12 @@
   border: 1px solid rgba(148, 163, 184, 0.18);
 }
 
+.jv-shopee-badge.error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+}
+
 .jv-shopee-status {
   display: none;
   margin-top: 12px;
@@ -201,6 +207,52 @@
   text-align: center;
   font-size: 0.84rem;
   line-height: 1.45;
+}
+
+.jv-inline-message {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
+.jv-inline-message.success {
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.jv-inline-message.error {
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.jv-inline-message.info {
+  color: hsl(var(--text-secondary));
+  border: 1px solid hsl(var(--border-color));
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.jv-sync-v2-panel {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.045), rgba(255, 255, 255, 0.02));
+}
+
+.jv-sync-v2-controls {
+  align-items: end;
+}
+
+.jv-sync-v2-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.jv-sync-v2-actions .btn-primary:disabled,
+#sync-modules-tbody .btn-primary:disabled {
+  box-shadow: none;
+  transform: none;
 }
 
 @media (max-width: 860px) {
