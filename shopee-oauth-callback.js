@@ -19,6 +19,33 @@
     return localStorage.getItem('supabase_url') || '';
   }
 
+  function getStoredApps() {
+    return window.jvShopeeMultiApp && window.jvShopeeMultiApp.state
+      ? (window.jvShopeeMultiApp.state.apps || [])
+      : [];
+  }
+
+  function currentPageRedirect() {
+    return window.location.origin + window.location.pathname;
+  }
+
+  function selectedShopeeApp() {
+    var apps = getStoredApps();
+    var select = byId('jv-shopee-app-select');
+    var selectedId = select ? select.value : '';
+    return apps.find(function (app) { return String(app.id) === String(selectedId); }) || apps.find(function (app) { return app.status === 'active' && app.redirect_uri; }) || apps[0] || null;
+  }
+
+  function syncRedirectField() {
+    var input = byId('jv-shopee-redirect-uri');
+    if (!input) return;
+    var app = selectedShopeeApp();
+    var preferred = app && app.redirect_uri ? app.redirect_uri : '';
+    if (!preferred) return;
+    var current = String(input.value || '').trim();
+    if (!current || current === currentPageRedirect()) input.value = preferred;
+  }
+
   function setStatus(message, type) {
     var box = byId('shopee-auth-inline-status');
     if (!box) return;
@@ -100,5 +127,10 @@
       var message = sessionStorage.getItem(ERROR_KEY);
       if (message) setStatus('Falha ao concluir OAuth da Shopee: ' + message, 'error');
     }, 1200);
+    setTimeout(syncRedirectField, 800);
+    setTimeout(syncRedirectField, 1800);
+    document.addEventListener('change', function (event) {
+      if (event.target && event.target.id === 'jv-shopee-app-select') syncRedirectField();
+    });
   });
 })();
