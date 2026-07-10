@@ -1,13 +1,17 @@
 [build]
-  publish = "."
-  command = ""
+  publish = "dist"
+  command = "node scripts/build.mjs && node scripts/validate-release.mjs"
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
-    X-Content-Type-Options = "nosniff"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.supabase.co https://*.supabase.net wss://*.supabase.co wss://*.supabase.net; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
     Referrer-Policy = "strict-origin-when-cross-origin"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    X-Robots-Tag = "noindex, nofollow"
 
 [[headers]]
   for = "/index.html"
@@ -15,67 +19,12 @@
     Cache-Control = "no-cache"
 
 [[headers]]
-  for = "/app.js"
+  for = "/*.js"
   [headers.values]
     Cache-Control = "no-cache"
 
 [[headers]]
-  for = "/styles.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/theme.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/theme-toggle.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/layout-fixes.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/shopee-multi-app.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/shopee-multi-app.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/shopee-oauth-callback.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/ads-analyzer.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/ads-analyzer.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/ads-analyzer-product-ads.js"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/ads-analyzer-product-ads.css"
-  [headers.values]
-    Cache-Control = "no-cache"
-
-[[headers]]
-  for = "/hotfix.js"
+  for = "/*.css"
   [headers.values]
     Cache-Control = "no-cache"
 

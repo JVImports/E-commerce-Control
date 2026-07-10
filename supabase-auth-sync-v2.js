@@ -1,12 +1,8 @@
 (function () {
   'use strict';
 
-  var VERSION = '20260703-auth-sync-v2';
+  var VERSION = '20260710-release-hardening';
   var SYNC_SLUG = 'shopee-sync-v2';
-  var DEMO_USERS = [
-    { role: 'admin', name: 'Administrador JV', email: 'admin@jvimports.com.br', password: 'JVAdm@2026' },
-    { role: 'cliente', name: 'Cliente JV', email: 'cliente@jvimports.com.br', password: 'JVCliente@2026' }
-  ];
   var state = {
     shops: [],
     lastStatus: null,
@@ -77,13 +73,6 @@
     return Boolean(localStorage.getItem('supabase_url') && localStorage.getItem('supabase_key'));
   }
 
-  function findDemoUser(email, password) {
-    var cleanEmail = String(email || '').trim().toLowerCase();
-    return DEMO_USERS.find(function (user) {
-      return user.email.toLowerCase() === cleanEmail && user.password === password;
-    });
-  }
-
   function setLoginMessage(message, type) {
     var form = byId('login-form-fields');
     if (!form) return;
@@ -104,7 +93,7 @@
     if (app) app.style.display = 'none';
     if (login) login.style.display = 'flex';
     var subtitle = byId('login-subtitle');
-    if (subtitle) subtitle.innerText = 'Use seu login Supabase para sincronizar. Admin/cliente liberam apenas visualização local.';
+    if (subtitle) subtitle.innerText = 'Use seu login autorizado do Supabase para acessar o painel.';
     if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
   }
 
@@ -134,16 +123,24 @@
     refreshUserChrome();
   }
 
-  function refreshUserChrome(user, demoUser) {
+  function clearLegacyDemoSession() {
+    ['jv_demo_logged_in', 'jv_demo_user_role', 'jv_demo_user_name'].forEach(function (key) {
+      sessionStorage.removeItem(key);
+    });
+  }
+
+  function refreshUserChrome(user) {
     var profileName = document.querySelector('.profile-name');
     var profileRole = document.querySelector('.profile-role');
     var avatar = document.querySelector('.avatar');
-    var real = sessionStorage.getItem('jv_real_supabase_auth') === 'true';
-    var name = demoUser ? demoUser.name : (user && user.email ? user.email : sessionStorage.getItem('jv_demo_user_name') || 'JV Imports');
-    var role = real ? 'Supabase Auth' : (sessionStorage.getItem('jv_demo_user_role') || 'visual').toUpperCase();
+    var metadata = user && user.app_metadata ? user.app_metadata : {};
+    var userMetadata = user && user.user_metadata ? user.user_metadata : {};
+    var name = userMetadata.full_name || userMetadata.name || (user && user.email) || 'JV Imports';
+    var role = String(metadata.role || metadata.account_role || 'autenticado').toUpperCase();
     if (profileName) profileName.innerText = name;
     if (profileRole) profileRole.innerText = role;
-    if (avatar) avatar.innerText = real ? 'OK' : 'JV';
+    if (avatar) avatar.innerText = name.slice(0, 2).toUpperCase();
+    if (user && user.email) sessionStorage.setItem('jv_auth_user_email', user.email);
   }
 
   async function trySupabasePasswordLogin(email, password) {
@@ -162,41 +159,19 @@
     var password = passwordInput ? passwordInput.value : '';
     setLoginMessage('', 'error');
     if (!email || !password) return setLoginMessage('Informe e-mail e senha para continuar.', 'error');
+    if (!hasSupabaseCredentials()) return setLoginMessage('Configure a URL e a chave pública do Supabase antes de entrar.', 'error');
     if (button) { button.disabled = true; button.innerText = 'Validando acesso...'; }
 
     try {
-      if (hasSupabaseCredentials()) {
-        try {
-          var session = await trySupabasePasswordLogin(email, password);
-          if (session) {
-            sessionStorage.setItem('jv_real_supabase_auth', 'true');
-            sessionStorage.removeItem('jv_demo_logged_in');
-            sessionStorage.removeItem('jv_demo_user_role');
-            sessionStorage.removeItem('jv_demo_user_name');
-            setLoginMessage('Sessão Supabase validada. Carregando painel seguro...', 'success');
-            refreshUserChrome(session.user, null);
-            setTimeout(function () { showDashboard(); }, 250);
-            return;
-          }
-        } catch (authError) {
-          var demo = findDemoUser(email, password);
-          if (!demo) throw authError;
-        }
-      }
-
-      var demoUser = findDemoUser(email, password);
-      if (!demoUser) throw new Error('Login não encontrado. Verifique o e-mail e a senha informados.');
-      sessionStorage.setItem('jv_demo_logged_in', 'true');
-      sessionStorage.setItem('jv_demo_user_role', demoUser.role);
-      sessionStorage.setItem('jv_demo_user_name', demoUser.name);
-      sessionStorage.setItem('jv_real_supabase_auth', 'false');
-      setLoginMessage('Acesso visual liberado. Para sincronizar Shopee, entre com usuário Supabase Auth.', 'success');
-      refreshUserChrome(null, demoUser);
-      setTimeout(function () {
-        if (!hasSupabaseCredentials()) showSetup();
-        else showDashboard();
-      }, 350);
+      var session = await trySupabasePasswordLogin(email, password);
+      if (!session) throw new Error('O Supabase não retornou uma sessão válida.');
+      clearLegacyDemoSession();
+      sessionStorage.setItem('jv_real_supabase_auth', 'true');
+      setLoginMessage('Sessão validada. Carregando painel...', 'success');
+      refreshUserChrome(session.user);
+      setTimeout(function () { showDashboard(); }, 200);
     } catch (error) {
+      sessionStorage.removeItem('jv_real_supabase_auth');
       setLoginMessage(error.message || 'Falha ao validar o acesso.', 'error');
     } finally {
       if (button) { button.disabled = false; button.innerText = 'Entrar no Painel'; }
@@ -204,10 +179,9 @@
   };
 
   window.logout = async function () {
-    sessionStorage.removeItem('jv_demo_logged_in');
-    sessionStorage.removeItem('jv_demo_user_role');
-    sessionStorage.removeItem('jv_demo_user_name');
+    clearLegacyDemoSession();
     sessionStorage.removeItem('jv_real_supabase_auth');
+    sessionStorage.removeItem('jv_auth_user_email');
     var client = getClient();
     if (client && client.auth) {
       try { await client.auth.signOut(); } catch (e) { console.warn('SignOut failed:', e); }
@@ -504,11 +478,17 @@
   };
 
   async function hydrate() {
+    clearLegacyDemoSession();
     setDefaultSyncV2Url();
     ensureSyncPanel();
     var user = await getSessionUser();
-    if (user) sessionStorage.setItem('jv_real_supabase_auth', 'true');
-    refreshUserChrome(user, null);
+    if (!user) {
+      sessionStorage.removeItem('jv_real_supabase_auth');
+      showLogin();
+      return;
+    }
+    sessionStorage.setItem('jv_real_supabase_auth', 'true');
+    refreshUserChrome(user);
     await refreshV2Status({ silent: true });
     await renderLogsAndModules();
   }

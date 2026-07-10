@@ -2,11 +2,11 @@
   'use strict';
 
   var STORAGE_KEY = 'jv_theme';
-  var ADS_ANALYZER_VERSION = '20260701-ads';
-  var ADS_ANALYZER_PRODUCT_VERSION = '20260701-product-ads-v2';
-  var LAYOUT_FIX_VERSION = '20260701-layout-fixes';
-  var SHOPEE_MULTI_APP_VERSION = '20260701-shopee-multi-app';
-  var AUTH_SYNC_V2_VERSION = '20260703-auth-sync-v2';
+  var ADS_ANALYZER_VERSION = '20260710-release-hardening';
+  var ADS_ANALYZER_PRODUCT_VERSION = '20260710-release-hardening';
+  var LAYOUT_FIX_VERSION = '20260710-release-hardening';
+  var SHOPEE_MULTI_APP_VERSION = '20260710-release-hardening';
+  var AUTH_SYNC_V2_VERSION = '20260710-release-hardening';
 
   function guardShopeeOAuthCallback() {
     try {
@@ -119,6 +119,9 @@
       script.dataset.loaded = 'true';
       if (typeof onload === 'function') onload();
     };
+    script.onerror = function () {
+      window.dispatchEvent(new CustomEvent('jv:asset-error', { detail: { id: id, src: src } }));
+    };
     document.body.appendChild(script);
     return script;
   }
@@ -146,7 +149,6 @@
       if (window.jvShopeeMultiApp && typeof window.jvShopeeMultiApp.install === 'function') {
         window.jvShopeeMultiApp.install();
       }
-      ensureAuthSyncV2Assets();
     });
     ensureScript('shopee-oauth-callback-script', 'shopee-oauth-callback.js?v=' + SHOPEE_MULTI_APP_VERSION);
   }

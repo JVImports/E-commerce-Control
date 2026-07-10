@@ -76,7 +76,7 @@
   async function postCallback(payload, token) {
     var baseUrl = getSupabaseUrl().replace(/\/+$/, '');
     if (!baseUrl) throw new Error('Supabase URL não configurada.');
-    var response = await fetch(baseUrl + '/functions/v1/shopee-auth', {
+    var response = await fetch(baseUrl + '/functions/v1/shopee-auth-v2', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -121,7 +121,10 @@
     }
   }
 
-  window.addEventListener('DOMContentLoaded', function () {
+  var booted = false;
+  function bootOAuthCallback() {
+    if (booted) return;
+    booted = true;
     setTimeout(function () { processCallback(0); }, 300);
     setTimeout(function () {
       var message = sessionStorage.getItem(ERROR_KEY);
@@ -132,5 +135,12 @@
     document.addEventListener('change', function (event) {
       if (event.target && event.target.id === 'jv-shopee-app-select') syncRedirectField();
     });
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', bootOAuthCallback, { once: true });
+  } else {
+    bootOAuthCallback();
+  }
+
 })();

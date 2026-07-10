@@ -5,3 +5,4 @@ supabase-go.exe
 .netlify/
 node_modules/
 .env
+dist/

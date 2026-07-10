@@ -357,7 +357,7 @@
     tbody.innerHTML = rows.map(renderListingRow).join('');
     tbody.querySelectorAll('tr[data-item-id]').forEach(function (row) {
       row.addEventListener('click', function () {
-        openProductOptimizer(row.getAttribute('data-item-id'));
+        openProductOptimizer(row.getAttribute('data-item-id'), row.getAttribute('data-shop-id'));
       });
     });
 
@@ -454,7 +454,7 @@
     const recommendations = score.recommendations.length ? score.recommendations.slice(0, 3).join(' · ') : 'Excelente. Manter acompanhamento.';
 
     return [
-      '<tr data-item-id="' + html(item.item_id) + '" class="ads-clickable-row">',
+      '<tr data-item-id="' + html(item.item_id) + '" data-shop-id="' + html(item.shop_id || '') + '" class="ads-clickable-row">',
       '<td class="ads-name-cell"><div class="ads-product-title">' + html(item.item_name || 'Anuncio sem titulo') + '</div><div class="ads-product-meta">ID ' + html(item.item_id || '-') + '</div></td>',
       '<td><img class="ads-product-image" src="' + html(safeImage(item.image_url)) + '" alt="Capa do anuncio"></td>',
       '<td><span class="score-pill ' + (active ? 'excellent' : 'poor') + '">' + html(statusLabel(item)) + '</span></td>',

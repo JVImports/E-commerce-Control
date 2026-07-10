@@ -1,0 +1,7 @@
+project_id = "qzcxukcwvjnhbnwpjceg"
+
+[functions.shopee-auth-v2]
+verify_jwt = true
+
+[functions.shopee-sync-v2]
+verify_jwt = true

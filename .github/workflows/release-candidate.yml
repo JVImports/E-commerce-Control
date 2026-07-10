@@ -1,0 +1,33 @@
+name: Release candidate checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - codex/product-ads-layout-fixes
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build public allowlist
+        run: node scripts/build.mjs
+      - name: Validate release contents
+        run: node scripts/validate-release.mjs
+      - name: Check browser JavaScript syntax
+        run: |
+          node --check app.js
+          node --check hotfix.js
+          node --check theme-toggle.js
+          node --check supabase-auth-sync-v2.js
+          node --check shopee-multi-app.js
+          node --check shopee-oauth-callback.js
+          node --check ads-analyzer.js
+          node --check ads-analyzer-product-ads.js

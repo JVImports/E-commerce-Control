@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.106.2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -7,6 +7,17 @@ const ENV_PARTNER_KEY = Deno.env.get("SHOPEE_PARTNER_KEY") ?? "";
 const ENV_BASE_URL = Deno.env.get("SHOPEE_BASE_URL") ?? "https://partner.shopeemobile.com";
 const ENV_ADS_BASE_URL = Deno.env.get("SHOPEE_ADS_BASE_URL") ?? "https://openplatform.shopee.com.br";
 const SHOPEE_REQUEST_DELAY_MS = Number(Deno.env.get("SHOPEE_REQUEST_DELAY_MS") ?? "300");
+const PARTNER_ORIGINS = new Set(["https://partner.shopeemobile.com"]);
+const ADS_ORIGINS = new Set(["https://openplatform.shopee.com.br"]);
+
+class HttpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+  }
+}
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Missing Supabase env vars");
 
@@ -80,8 +91,18 @@ function asNumber(value: unknown, fallback = 0) {
   return Number.isFinite(num) ? num : fallback;
 }
 
-function cleanBaseUrl(value: unknown, fallback: string) {
-  return String(value || fallback).trim().replace(/\/+$/, "");
+function cleanBaseUrl(value: unknown, fallback: string, allowedOrigins: Set<string>) {
+  let url: URL;
+  try {
+    url = new URL(String(value || fallback).trim());
+  } catch {
+    throw new HttpError(400, "Shopee base URL inválida.");
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.port || url.pathname !== "/" || url.search || url.hash) {
+    throw new HttpError(400, "Shopee base URL deve ser uma origem HTTPS sem caminho, credenciais, porta, query ou fragmento.");
+  }
+  if (!allowedOrigins.has(url.origin)) throw new HttpError(400, "Shopee base URL não permitida.");
+  return url.origin;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -187,7 +208,9 @@ async function shopeeRequest<T>({ method, path, params, payload, accessToken, sh
     const response = await fetch(`${baseUrl ?? credential.baseUrl}${path}?${query.toString()}`, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: payload ? JSON.stringify(payload) : undefined
+      body: payload ? JSON.stringify(payload) : undefined,
+      redirect: "error",
+      signal: AbortSignal.timeout(30000)
     });
 
     if (response.status === 429 && attempt < 3) {
@@ -210,9 +233,9 @@ async function shopeeRequest<T>({ method, path, params, payload, accessToken, sh
 async function getUserFromRequest(req: Request) {
   const header = req.headers.get("Authorization") ?? "";
   const jwt = header.replace(/^Bearer\s+/i, "").trim();
-  if (!jwt) throw new Error("Missing Authorization bearer token");
+  if (!jwt) throw new HttpError(401, "Missing Authorization bearer token");
   const { data, error } = await supabase.auth.getUser(jwt);
-  if (error || !data.user) throw new Error("Invalid Supabase user token");
+  if (error || !data.user) throw new HttpError(401, "Invalid or expired Supabase user token");
   return data.user;
 }
 
@@ -233,7 +256,9 @@ function safeShop(shop: any) {
     updatedAt: shop.updated_at,
     updated_at: shop.updated_at,
     tokenExpired: shop.token_expire_in ? new Date(shop.token_expire_in).getTime() <= Date.now() : true,
-    syncReady: Boolean(shop.access_token && shop.refresh_token)
+    token_expired: shop.token_expire_in ? new Date(shop.token_expire_in).getTime() <= Date.now() : true,
+    syncReady: Boolean(shop.access_token && shop.refresh_token),
+    sync_ready: Boolean(shop.access_token && shop.refresh_token)
   };
 }
 
@@ -257,8 +282,23 @@ async function loadShop(userId: string, shopId: number): Promise<ShopRow> {
     .limit(1)
     .maybeSingle();
   if (error) throw error;
-  if (!data) throw new Error(`Shop ${shopId} not linked to this account`);
+  if (!data) throw new HttpError(403, `Shop ${shopId} is not linked to this user`);
   return data as ShopRow;
+}
+
+async function assertSyncPermission(userId: string, accountId?: string | null) {
+  if (!accountId) throw new HttpError(403, "Shop is not associated with an account.");
+  const { data, error } = await supabase
+    .from("account_members")
+    .select("role")
+    .eq("account_id", accountId)
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data || !["owner", "admin"].includes(String(data.role))) {
+    throw new HttpError(403, "Only account owners and administrators can run Shopee synchronization.");
+  }
 }
 
 async function loadCredential(shop: ShopRow): Promise<ShopeeCredential> {
@@ -267,8 +307,8 @@ async function loadCredential(shop: ShopRow): Promise<ShopeeCredential> {
       appId: null,
       partnerId: ENV_PARTNER_ID,
       partnerKey: ENV_PARTNER_KEY,
-      baseUrl: cleanBaseUrl(ENV_BASE_URL, "https://partner.shopeemobile.com"),
-      adsBaseUrl: cleanBaseUrl(ENV_ADS_BASE_URL, ENV_BASE_URL),
+      baseUrl: cleanBaseUrl(ENV_BASE_URL, "https://partner.shopeemobile.com", PARTNER_ORIGINS),
+      adsBaseUrl: cleanBaseUrl(ENV_ADS_BASE_URL, "https://openplatform.shopee.com.br", ADS_ORIGINS),
       source: "env"
     };
   }
@@ -295,8 +335,8 @@ async function loadCredential(shop: ShopRow): Promise<ShopeeCredential> {
     appId: app.id,
     partnerId: Number(app.partner_id),
     partnerKey: String(secret.partner_key),
-    baseUrl: cleanBaseUrl(app.base_url, ENV_BASE_URL),
-    adsBaseUrl: cleanBaseUrl(app.ads_base_url, app.base_url || ENV_ADS_BASE_URL),
+    baseUrl: cleanBaseUrl(app.base_url, ENV_BASE_URL, PARTNER_ORIGINS),
+    adsBaseUrl: cleanBaseUrl(app.ads_base_url, ENV_ADS_BASE_URL, ADS_ORIGINS),
     source: "app"
   };
 }
@@ -962,6 +1002,9 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
   const url = new URL(req.url);
   const action = String(body.action ?? url.searchParams.get("action") ?? "status");
   const shopId = body.shop_id ?? url.searchParams.get("shop_id");
+  if (req.method === "GET" && action !== "status") {
+    throw new HttpError(405, "GET is read-only and only supports the status action.");
+  }
 
   if (action === "status" && !shopId) {
     return {
@@ -994,6 +1037,8 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
       authExpiresAt: shop.auth_expires_at ?? null
     };
   }
+
+  await assertSyncPermission(userId, shop.account_id);
 
   if (action === "refresh-token") {
     const accessToken = await refreshAccessToken(shop, credential);
@@ -1074,12 +1119,13 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   let body: Record<string, any> = {};
   try {
+    if (req.method !== "GET" && req.method !== "POST") throw new HttpError(405, "Method not allowed");
     const user = await getUserFromRequest(req);
     if (req.method === "POST") body = await req.json().catch(() => ({}));
-    if (req.method !== "GET" && req.method !== "POST") return jsonResponse({ ok: false, error: "Method not allowed" }, 405);
     return jsonResponse(await handleAction(user.id, body, req));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return jsonResponse({ ok: false, error: message }, 500);
+    const status = error instanceof HttpError ? error.status : 500;
+    return jsonResponse({ ok: false, error: message }, status);
   }
 });

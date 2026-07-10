@@ -91,10 +91,10 @@
   async function authRequest(body, options) {
     var token = await getSessionToken();
     if (!token) {
-      throw new Error('Para gerenciar apps e tokens Shopee, entre com uma sessão real do Supabase Auth. O login visual/demo não libera operações seguras.');
+      throw new Error('Para gerenciar apps e tokens Shopee, entre com uma sessão válida do Supabase Auth.');
     }
 
-    var url = functionUrl('shopee-auth');
+    var url = functionUrl('shopee-auth-v2');
     if (!url) throw new Error('Supabase URL não configurada.');
 
     var res = await fetch(url, {
@@ -360,6 +360,9 @@
   }
 
   async function deleteShopPatched(shopId) {
+    var shop = (state.shops || []).find(function (row) { return String(row.shop_id || row.shopId) === String(shopId); });
+    var label = shop ? (shop.shop_name || shop.shopName || shopId) : shopId;
+    if (!window.confirm('Desvincular a loja "' + label + '"? As sincronizações serão interrompidas até uma nova autorização.')) return;
     try {
       await authRequest({ action: 'unlink-shop', shop_id: shopId });
       if (String((function () { try { return selectedShop; } catch (e) { return ''; } })()) === String(shopId)) {
