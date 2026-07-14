@@ -4,10 +4,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PARTNER_ID = Number(Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_ID") ?? "0");
 const PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
+const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
 const PARTNER_ORIGIN = "https://partner.shopeemobile.com";
 const TOKEN_PATH = "/api/v2/auth/token/get";
 const APP_RETURN_URL = Deno.env.get("APP_RETURN_URL") ??
-  "https://ecommerce-control-jv.netlify.app/";
+  "https://mavis-hub.netlify.app/";
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing Supabase environment variables");
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
   let claimed = false;
   try {
     if (req.method !== "GET") return new Response("Method not allowed", { status: 405 });
-    if (!PARTNER_ID || PARTNER_KEY.length < 8) return redirect(returnPath, "error", "app_not_configured");
+    if (!V3_ENABLED || !PARTNER_ID || PARTNER_KEY.length < 8) return redirect(returnPath, "error", "connection_unavailable");
 
     const url = new URL(req.url);
     const state = String(url.searchParams.get("state") || "");

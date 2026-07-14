@@ -2,9 +2,10 @@ import { createClient } from "npm:@supabase/supabase-js@2.106.2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const DEFAULT_ORIGIN = "https://ecommerce-control-jv.netlify.app";
+const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://mavis-hub.netlify.app";
 const ALLOWED_ORIGINS = new Set([
   DEFAULT_ORIGIN,
+  "https://ecommerce-control-jv.netlify.app",
   "http://localhost:8888",
   "http://127.0.0.1:8888"
 ]);
@@ -25,7 +26,7 @@ class HttpError extends Error {
 
 function headers(req: Request) {
   const origin = req.headers.get("origin") ?? "";
-  const preview = /^https:\/\/[a-z0-9-]+--ecommerce-control-jv\.netlify\.app$/i.test(origin);
+  const preview = /^https:\/\/[a-z0-9-]+--(?:mavis-hub|ecommerce-control-jv)\.netlify\.app$/i.test(origin);
   return {
     "Access-Control-Allow-Origin": ALLOWED_ORIGINS.has(origin) || preview ? origin : DEFAULT_ORIGIN,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",

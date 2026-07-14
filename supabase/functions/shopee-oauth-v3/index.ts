@@ -4,15 +4,16 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PARTNER_ID = Number(Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_ID") ?? "0");
 const PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
+const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
 const PARTNER_ORIGIN = "https://partner.shopeemobile.com";
 const AUTH_PATH = "/api/v2/shop/auth_partner";
 const CALLBACK_URL = Deno.env.get("SHOPEE_THIRD_PARTY_REDIRECT_URI") ??
   `${SUPABASE_URL}/functions/v1/shopee-oauth-callback-v3`;
 const DEFAULT_RETURN_URL = Deno.env.get("APP_RETURN_URL") ??
-  "https://ecommerce-control-jv.netlify.app/";
+  "https://mavis-hub.netlify.app/";
 const ALLOWED_RETURN_ORIGINS = new Set(
   (Deno.env.get("APP_ALLOWED_RETURN_ORIGINS") ??
-    "https://ecommerce-control-jv.netlify.app,http://localhost:8888,http://127.0.0.1:8888")
+    "https://mavis-hub.netlify.app,https://ecommerce-control-jv.netlify.app,http://localhost:8888,http://127.0.0.1:8888")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)
@@ -53,7 +54,7 @@ function json(req: Request, body: unknown, status = 200) {
 }
 
 function isConfigured() {
-  return Number.isFinite(PARTNER_ID) && PARTNER_ID > 0 && PARTNER_KEY.length >= 8;
+  return V3_ENABLED && Number.isFinite(PARTNER_ID) && PARTNER_ID > 0 && PARTNER_KEY.length >= 8;
 }
 
 function randomState() {
@@ -152,7 +153,7 @@ async function bootstrap(userId: string) {
 
 async function startAuthorization(userId: string, body: Record<string, unknown>) {
   if (!isConfigured()) {
-    throw new HttpError(503, "O app third-party ainda aguarda Partner ID/Key de produção.");
+    throw new HttpError(503, "A conexão Shopee está temporariamente indisponível.");
   }
   const membership = await resolveMembership(userId, body.account_id, true);
   const returnPath = normalizeReturnPath(body.return_path);
