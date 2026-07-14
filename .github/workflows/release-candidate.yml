@@ -4,7 +4,9 @@ on:
   pull_request:
   push:
     branches:
-      - codex/product-ads-layout-fixes
+      - main
+      - "codex/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,27 +20,28 @@ jobs:
         with:
           node-version: 22
       - name: Build public allowlist
+        env:
+          MAVIS_SUPABASE_URL: https://ci-placeholder.supabase.co
+          MAVIS_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_not_a_secret
+          CONTEXT: deploy-preview
         run: node scripts/build.mjs
       - name: Validate release contents
         run: node scripts/validate-release.mjs
+      - name: Check clean patch
+        run: git diff --check
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Check Edge Function TypeScript
-        run: |
-          deno check supabase/functions/shopee-oauth-v3/index.ts
-          deno check supabase/functions/shopee-oauth-callback-v3/index.ts
-          deno check supabase/functions/shopee-ads-import-v1/index.ts
+      - name: Check all Edge Function TypeScript
+        shell: bash
+        run: find supabase/functions -name '*.ts' -print0 | xargs -0 -n 1 deno check
       - name: Check browser JavaScript syntax
-        run: |
-          node --check app.js
-          node --check hotfix.js
-          node --check theme-toggle.js
-          node --check supabase-auth-sync-v2.js
-          node --check shopee-multi-app.js
-          node --check shopee-oauth-callback.js
-          node --check shopee-third-party-app.js
-          node --check shopee-ads-import.js
-          node --check ads-analyzer.js
-          node --check ads-analyzer-product-ads.js
+        shell: bash
+        run: git ls-files -z '*.js' '*.mjs' | xargs -0 -n 1 node --check
+      - name: Run release contract tests
+        run: node --test tests/release-contract.test.mjs
 

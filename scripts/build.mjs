@@ -1,28 +1,8 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const publicFiles = [
-  "index.html",
-  "styles.css",
-  "theme.css",
-  "theme-toggle.js",
-  "app.js",
-  "hotfix.js",
-  "ads-analyzer.css",
-  "ads-analyzer.js",
-  "ads-analyzer-product-ads.css",
-  "ads-analyzer-product-ads.js",
-  "layout-fixes.css",
-  "shopee-multi-app.css",
-  "shopee-multi-app.js",
-  "shopee-oauth-callback.js",
-  "shopee-third-party-app.css",
-  "shopee-third-party-app.js",
-  "shopee-ads-import.css",
-  "shopee-ads-import.js",
-  "supabase-auth-sync-v2.js"
-];
+import { generatedPublicFiles, publicFiles } from "./public-files.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(root, "dist");
@@ -30,5 +10,23 @@ const dist = join(root, "dist");
 await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 await Promise.all(publicFiles.map((file) => cp(join(root, file), join(dist, file))));
-console.log(`Built dist with ${publicFiles.length} allowlisted public files.`);
+
+const supabaseUrl = process.env.MAVIS_SUPABASE_URL?.trim();
+const publishableKey = process.env.MAVIS_SUPABASE_PUBLISHABLE_KEY?.trim();
+if (!supabaseUrl || !publishableKey) {
+  throw new Error("MAVIS_SUPABASE_URL and MAVIS_SUPABASE_PUBLISHABLE_KEY are required");
+}
+let parsedUrl;
+try {
+  parsedUrl = new URL(supabaseUrl);
+} catch {
+  throw new Error("MAVIS_SUPABASE_URL must be a valid HTTPS URL");
+}
+if (parsedUrl.protocol !== "https:") throw new Error("MAVIS_SUPABASE_URL must use HTTPS");
+
+const environment = process.env.CONTEXT === "production" ? "production" : "deploy-preview";
+const runtimeConfig = { supabaseUrl, publishableKey, environment, reviewPath: "/?review=shopee" };
+const serialized = JSON.stringify(runtimeConfig).replaceAll("<", "\\u003c");
+await writeFile(join(dist, generatedPublicFiles[0]), `window.MAVIS_RUNTIME_CONFIG = Object.freeze(${serialized});\n`, "utf8");
+console.log(`Built dist with ${publicFiles.length + generatedPublicFiles.length} allowlisted public files.`);
 
