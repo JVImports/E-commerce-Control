@@ -1,14 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
 
-const URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
 const PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
 const BASE_URL = "https://partner.shopeemobile.com";
 const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://mavis-hub.netlify.app";
 const ALLOWED_ORIGINS = new Set((Deno.env.get("APP_ALLOWED_RETURN_ORIGINS") ?? DEFAULT_ORIGIN).split(",").map((v) => v.trim()).filter(Boolean));
-if (!URL || !KEY) throw new Error("Missing Supabase environment variables");
-const db = createClient(URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+if (!SUPABASE_URL || !KEY) throw new Error("Missing Supabase environment variables");
+const db = createClient(SUPABASE_URL, KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 function json(req: Request, body: unknown, status = 200) {
