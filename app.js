@@ -63,7 +63,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.documentElement.dataset.mavisBootState = 'booting';
     initSupabase();
     
-    // Check URL parameters for Shopee OAuth code redirection
+    // Check URL parameters returned by Shopee authorization
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const shopId = urlParams.get('shop_id');
