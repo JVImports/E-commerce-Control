@@ -392,7 +392,7 @@ returns void
 language plpgsql security definer set search_path = ''
 as $$
 declare connection public.shopee_connections%rowtype;
-declare token private.shopee_authorization_tokens%rowtype;
+token private.shopee_authorization_tokens%rowtype;
 begin
   select * into connection from public.shopee_connections where id=p_connection_id for update;
   if connection.id is null then raise exception 'Connection not found'; end if;
@@ -422,7 +422,7 @@ create or replace function public.commit_shopee_ads_manual_v1(
 language plpgsql security definer set search_path = ''
 as $$
 declare batch public.shopee_ads_import_batches%rowtype;
-declare changed integer;
+changed integer;
 begin
   select * into batch from public.shopee_ads_import_batches
    where id=p_batch_id for update;
@@ -487,4 +487,3 @@ grant execute on function public.get_shopee_authorization_tokens_v3(uuid) to ser
 grant execute on function public.rotate_shopee_authorization_tokens_v3(uuid,text,text,timestamptz,timestamptz) to service_role;
 grant execute on function public.revoke_shopee_connection_v3(uuid) to service_role;
 grant execute on function public.commit_shopee_ads_manual_v1(uuid,jsonb) to service_role;
-
