@@ -6,3 +6,9 @@ supabase-go.exe
 node_modules/
 .env
 dist/
+/Falha de Aprovação/
+/tmp/
+/.worktrees/
+*.dump
+*.sql.backup
+*.mp4
