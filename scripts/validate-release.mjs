@@ -36,3 +36,4 @@ for (const file of actual) {
 }
 
 console.log("Release validation passed: allowlist and secret scan are clean.");
+

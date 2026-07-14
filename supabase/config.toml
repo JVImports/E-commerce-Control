@@ -5,3 +5,14 @@ verify_jwt = true
 
 [functions.shopee-sync-v2]
 verify_jwt = true
+
+[functions.shopee-oauth-v3]
+verify_jwt = true
+
+# Public callback: authenticated by a short-lived, one-time hashed OAuth state.
+[functions.shopee-oauth-callback-v3]
+verify_jwt = false
+
+[functions.shopee-ads-import-v1]
+verify_jwt = true
+

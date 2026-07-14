@@ -17,6 +17,10 @@ export const publicFiles = [
   "shopee-multi-app.css",
   "shopee-multi-app.js",
   "shopee-oauth-callback.js",
+  "shopee-third-party-app.css",
+  "shopee-third-party-app.js",
+  "shopee-ads-import.css",
+  "shopee-ads-import.js",
   "supabase-auth-sync-v2.js"
 ];
 
@@ -27,3 +31,4 @@ await rm(dist, { recursive: true, force: true });
 await mkdir(dist, { recursive: true });
 await Promise.all(publicFiles.map((file) => cp(join(root, file), join(dist, file))));
 console.log(`Built dist with ${publicFiles.length} allowlisted public files.`);
+

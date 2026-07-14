@@ -7,6 +7,8 @@
   var LAYOUT_FIX_VERSION = '20260710-release-hardening';
   var SHOPEE_MULTI_APP_VERSION = '20260710-release-hardening';
   var AUTH_SYNC_V2_VERSION = '20260710-release-hardening';
+  var SHOPEE_THIRD_PARTY_VERSION = '20260710-third-party-v3';
+  var SHOPEE_ADS_IMPORT_VERSION = '20260710-ads-manual-v1';
 
   function guardShopeeOAuthCallback() {
     try {
@@ -143,6 +145,21 @@
     });
   }
 
+  function ensureShopeeThirdPartyAssets() {
+    ensureStylesheet('shopee-third-party-app-css', 'shopee-third-party-app.css?v=' + SHOPEE_THIRD_PARTY_VERSION);
+    ensureScript('shopee-third-party-app-script', 'shopee-third-party-app.js?v=' + SHOPEE_THIRD_PARTY_VERSION, function () {
+      if (window.jvShopeeThirdParty && typeof window.jvShopeeThirdParty.install === 'function') {
+        window.jvShopeeThirdParty.install();
+      }
+    });
+    ensureStylesheet('shopee-ads-import-css', 'shopee-ads-import.css?v=' + SHOPEE_ADS_IMPORT_VERSION);
+    ensureScript('shopee-ads-import-script', 'shopee-ads-import.js?v=' + SHOPEE_ADS_IMPORT_VERSION, function () {
+      if (window.jvShopeeAdsImport && typeof window.jvShopeeAdsImport.install === 'function') {
+        window.jvShopeeAdsImport.install();
+      }
+    });
+  }
+
   function ensureShopeeMultiAppAssets() {
     ensureStylesheet('shopee-multi-app-css', 'shopee-multi-app.css?v=' + SHOPEE_MULTI_APP_VERSION);
     ensureScript('shopee-multi-app-script', 'shopee-multi-app.js?v=' + SHOPEE_MULTI_APP_VERSION, function () {
@@ -209,7 +226,7 @@
   window.addEventListener('DOMContentLoaded', function () {
     patchApexCharts();
     installThemeToggle();
-    ensureShopeeMultiAppAssets();
+    ensureShopeeThirdPartyAssets();
     ensureAuthSyncV2Assets();
     ensureAdsAnalyzerAssets();
     applyTheme(getStoredTheme(), { silent: true });
