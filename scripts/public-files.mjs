@@ -1,6 +1,6 @@
 export const publicFiles = [
   "index.html",
-  "assets/mavis-logo.png",
+  "assets/mavis-logo-v2.png",
   "assets/mavis-mark.png",
   "styles.css",
   "theme.css",

@@ -7,7 +7,7 @@ const auth = await readFile(new URL('../supabase-auth-sync-v2.js', import.meta.u
 const integrations = await readFile(new URL('../shopee-third-party-app.js', import.meta.url), 'utf8');
 
 assert.ok(index.indexOf('runtime-config.js') < index.indexOf('@supabase/supabase-js'));
-assert.match(index, /assets\/mavis-logo\.png/);
+assert.match(index, /assets\/mavis-logo-v2\.png/);
 assert.match(index, /switchView\('shopee-sync'/);
 assert.doesNotMatch(app.slice(0, 250), /localStorage\.getItem\('supabase_(url|key)'/);
 assert.match(app, /fatal-config/);
