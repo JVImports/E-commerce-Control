@@ -30,7 +30,7 @@
 
   function getSupabaseUrl() {
     try { if (supabaseUrl) return String(supabaseUrl); } catch (e) {}
-    return localStorage.getItem('supabase_url') || '';
+    return String((window.MAVIS_RUNTIME_CONFIG || {}).supabaseUrl || '');
   }
 
   function getFunctionUrl(slug) {
@@ -40,18 +40,12 @@
 
   function getSyncUrl() {
     var preferred = getFunctionUrl(SYNC_SLUG);
-    var stored = localStorage.getItem('shopee_edge_url') || '';
-    if (!stored || /\/functions\/v1\/shopee-sync$/.test(stored)) return preferred || stored;
-    return stored;
+    return preferred;
   }
 
   function setDefaultSyncV2Url() {
     var url = getFunctionUrl(SYNC_SLUG);
     if (!url) return;
-    var input = byId('shopee-edge-url');
-    if (input && (!input.value || /\/functions\/v1\/shopee-sync$/.test(input.value))) input.value = url;
-    var stored = localStorage.getItem('shopee_edge_url') || '';
-    if (!stored || /\/functions\/v1\/shopee-sync$/.test(stored)) localStorage.setItem('shopee_edge_url', url);
     try { edgeFunctionUrl = url; } catch (e) {}
   }
 
@@ -70,7 +64,8 @@
   }
 
   function hasSupabaseCredentials() {
-    return Boolean(localStorage.getItem('supabase_url') && localStorage.getItem('supabase_key'));
+    var config = window.MAVIS_RUNTIME_CONFIG || {};
+    return Boolean(config.supabaseUrl && config.publishableKey);
   }
 
   function setLoginMessage(message, type) {
@@ -93,7 +88,7 @@
     if (app) app.style.display = 'none';
     if (login) login.style.display = 'flex';
     var subtitle = byId('login-subtitle');
-    if (subtitle) subtitle.innerText = 'Use seu login autorizado do Supabase para acessar o painel.';
+    if (subtitle) subtitle.innerText = 'Entre com o acesso recebido por convite.';
     if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons();
   }
 
@@ -119,7 +114,8 @@
     if (typeof window.loadAllData === 'function') {
       try { await window.loadAllData(); } catch (e) { console.warn('loadAllData failed after login', e); }
     }
-    if (typeof window.switchView === 'function') window.switchView('dashboard');
+    var reviewMode = new URLSearchParams(window.location.search).get('review') === 'shopee';
+    if (typeof window.switchView === 'function') window.switchView(reviewMode ? 'shopee-sync' : 'dashboard');
     refreshUserChrome();
   }
 
@@ -135,11 +131,16 @@
     var avatar = document.querySelector('.avatar');
     var metadata = user && user.app_metadata ? user.app_metadata : {};
     var userMetadata = user && user.user_metadata ? user.user_metadata : {};
-    var name = userMetadata.full_name || userMetadata.name || (user && user.email) || 'JV Imports';
+    var name = userMetadata.full_name || userMetadata.name || (user && user.email) || 'Usuário Mavis';
     var role = String(metadata.role || metadata.account_role || 'autenticado').toUpperCase();
     if (profileName) profileName.innerText = name;
     if (profileRole) profileRole.innerText = role;
     if (avatar) avatar.innerText = name.slice(0, 2).toUpperCase();
+    var isReadOnly = role === 'CLIENT';
+    document.querySelectorAll('[onclick*="switchView(\'importer\'"]')
+      .forEach(function (item) { item.style.display = isReadOnly ? 'none' : ''; });
+    var importer = byId('importer-view');
+    if (importer) importer.dataset.readOnlyRestricted = isReadOnly ? 'true' : 'false';
     if (user && user.email) sessionStorage.setItem('jv_auth_user_email', user.email);
   }
 
@@ -169,6 +170,8 @@
       sessionStorage.setItem('jv_real_supabase_auth', 'true');
       setLoginMessage('Sessão validada. Carregando painel...', 'success');
       refreshUserChrome(session.user);
+      document.documentElement.dataset.mavisBootState = 'authenticated';
+      window.dispatchEvent(new CustomEvent('mavis:auth-changed', { detail: { user: session.user } }));
       setTimeout(function () { showDashboard(); }, 200);
     } catch (error) {
       sessionStorage.removeItem('jv_real_supabase_auth');
@@ -187,6 +190,8 @@
       try { await client.auth.signOut(); } catch (e) { console.warn('SignOut failed:', e); }
     }
     showLogin();
+    document.documentElement.dataset.mavisBootState = 'unauthenticated';
+    window.dispatchEvent(new CustomEvent('mavis:auth-expired'));
   };
 
   function ensureSyncPanel() {
