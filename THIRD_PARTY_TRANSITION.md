@@ -36,6 +36,15 @@ Do not commit any real secret.
 - `shopee-sync-v3` account/authorization worker.
 - Destructive cleanup of legacy public tokens, secrets, states, triggers and v2 functions.
 
+## Known review findings before deployment
+
+- Reauthorizing an already connected shop must revoke the superseded authorization and delete its Vault secrets so stale grants do not remain orphaned.
+- The Ads importer must reject or aggregate duplicate natural keys within one file before executing the transactional upsert.
+- Confirm that SheetJS (`window.XLSX`) is loaded by the application before enabling XLSX imports; CSV does not depend on it.
+- The new connection panel replaces the legacy panel. If UI-accessible rollback is required, add an explicit legacy fallback instead of relying only on the retained v2 backend.
+- Run a database preflight for role values, duplicate external shop ownership and legacy backfill conflicts before applying the migration.
+- Expand the CI secret scan beyond assignment-style patterns before treating it as the sole credential gate.
+
 ## Before external customers
 
 1. Apply the additive migration after reviewing its preflight.
@@ -47,4 +56,3 @@ Do not commit any real secret.
 7. Mock-test OAuth success, replay, expiry, cross-tenant conflict and multi-shop token grants.
 8. After approval, authorize one internal shop, compare data, then authorize the second.
 9. Keep in-house apps available until both shops pass the v3 acceptance suite.
-
