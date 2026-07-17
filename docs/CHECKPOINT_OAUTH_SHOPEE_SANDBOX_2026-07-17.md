@@ -21,6 +21,26 @@ O release corretivo foi concluído e o OAuth está ativo **exclusivamente em San
 
 Próximo passo humano: entrar no Mavix Hub com `jvimports.vendas@gmail.com`, clicar em `Autorizar loja de teste Shopee` e concluir o consentimento usando uma **conta/loja Shopee Sandbox**. Não usar loja real com o Test Partner ID.
 
+## Atualização de diagnóstico — 2026-07-17 17:16 BRT
+
+Após novo clique, a Shopee Sandbox respondeu:
+
+```json
+{"error":"error_sign","message":"Wrong sign."}
+```
+
+Isso confirma que o Test Partner ID `1238618` e o endpoint Sandbox são reconhecidos; a falha restante está na validação HMAC. O código usa a fórmula oficial `partner_id + /api/v2/shop/auth_partner + timestamp` com HMAC-SHA256.
+
+Evidências seguras:
+
+- o secret de Partner ID foi atualizado em `2026-07-17T14:30:48Z`;
+- o secret de Partner Key foi atualizado em `2026-07-17T14:40:51Z`;
+- o banco legado contém chaves de apps internos diferentes (`1237334` Sandbox e `2038214` Live), que não podem ser usadas com `1238618`;
+- não há espaço externo nas chaves internas legadas, mas o valor do secret Third-party não foi lido ou exposto;
+- uma sonda pública temporária foi proposta, bloqueada pela política de segurança antes do deploy e removida localmente; nenhuma função diagnóstica foi publicada.
+
+Próximo passo bloqueante: copiar novamente, diretamente do app `Mavix Hub` na Shopee Open Platform, a **Test Partner Key correspondente ao Test Partner ID `1238618`** e substituir somente o secret `SHOPEE_THIRD_PARTY_PARTNER_KEY` no projeto Supabase `qzcxukcwvjnhbnwpjceg`. Não enviar a chave por chat, Git, screenshot ou log. Depois, repetir o clique e verificar se `error_sign` desapareceu.
+
 ## Objetivo atual
 
 Concluir a validação OAuth do app `Mavix Hub` na Shopee Open Platform em Sandbox, reunir evidências e então submeter o app para Go-Live. Somente depois da aprovação e emissão das credenciais Live será possível reautorizar as lojas reais.
