@@ -28,7 +28,8 @@ test('Test Partner ID can use Sandbox without being sent to the Live endpoint', 
     assert.match(source, /SHOPEE_THIRD_PARTY_ENVIRONMENT/);
     assert.match(source, /resolveShopeeV3Environment/);
   }
-  assert.match(environment, /partner\.test-stable\.shopeemobile\.com/);
+  assert.match(environment, /openplatform\.sandbox\.test-stable\.shopee\.sg/);
+  assert.doesNotMatch(environment, /partner\.test-stable\.shopeemobile\.com/);
   assert.match(environment, /environment !== "live" && environment !== "sandbox"/);
   assert.match(oauth, /environment/);
   assert.match(callback, /p_environment/);

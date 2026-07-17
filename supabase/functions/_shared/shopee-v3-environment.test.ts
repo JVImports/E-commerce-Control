@@ -4,11 +4,17 @@ import {
   SHOPEE_SANDBOX_PARTNER_ORIGIN
 } from "./shopee-v3-environment.ts";
 
-Deno.test("Test Partner environment resolves to the Sandbox endpoint", () => {
+Deno.test("modern shpk Sandbox environment resolves to the modern Shopee gateway", () => {
   const config = resolveShopeeV3Environment("sandbox");
   if (config.environment !== "sandbox") throw new Error("Expected sandbox environment");
+  if (config.partnerOrigin !== "https://openplatform.sandbox.test-stable.shopee.sg") {
+    throw new Error("Sandbox credentials would be sent to the legacy Shopee gateway");
+  }
+  if (config.adsOrigin !== "https://openplatform.sandbox.test-stable.shopee.sg") {
+    throw new Error("Sandbox Ads calls would be sent to the legacy Shopee gateway");
+  }
   if (config.partnerOrigin !== SHOPEE_SANDBOX_PARTNER_ORIGIN) {
-    throw new Error("Sandbox Partner ID would be sent to the Live endpoint");
+    throw new Error("Sandbox origin constant and resolved configuration must match");
   }
 });
 

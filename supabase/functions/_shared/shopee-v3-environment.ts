@@ -1,7 +1,7 @@
 export type ShopeeV3Environment = "live" | "sandbox";
 
 export const SHOPEE_LIVE_PARTNER_ORIGIN = "https://partner.shopeemobile.com";
-export const SHOPEE_SANDBOX_PARTNER_ORIGIN = "https://partner.test-stable.shopeemobile.com";
+export const SHOPEE_SANDBOX_PARTNER_ORIGIN = "https://openplatform.sandbox.test-stable.shopee.sg";
 export const SHOPEE_LIVE_ADS_ORIGIN = "https://openplatform.shopee.com.br";
 
 export function resolveShopeeV3Environment(value: string | undefined) {

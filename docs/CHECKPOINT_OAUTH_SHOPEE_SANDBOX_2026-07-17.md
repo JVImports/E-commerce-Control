@@ -2,6 +2,45 @@
 
 Data: 2026-07-17 (America/Sao_Paulo)
 
+## Atualização operacional final — 2026-07-17 16:59 BRT
+
+O release corretivo foi concluído e o OAuth está ativo **exclusivamente em Sandbox**.
+
+- PR #4 integrada em `main` no commit `d01005efbd64fb79f0c493220ed8cb23766f9c31`.
+- workflow pós-merge `Release candidate checks` aprovado (run `29609198971`).
+- migration `segregate_shopee_oauth_v3_environment` aplicada em produção.
+- produção configurada com `SHOPEE_THIRD_PARTY_ENVIRONMENT=sandbox`.
+- quatro Edge Functions corretivas publicadas em produção.
+- frontend corretivo publicado no Netlify no deploy `6a5a891c633e457d7836fc31`.
+- bundle público confirmado com `Autorizar loja de teste Shopee` e aviso de conta de teste.
+- `MAVIS_SHOPEE_V3_ENABLED=true` em produção.
+- callback sem parâmetros retorna HTTP 303 com `shopee_code=callback_invalid`, confirmando a função ativa.
+- endpoint inicial sem sessão retorna HTTP 401, confirmando proteção por autenticação.
+- ambas as assinaturas de `finalize_shopee_oauth_v3` continuam restritas: `anon=false`, `authenticated=false`, `service_role=true`.
+- banco ainda contém somente 2 conexões `live/legacy_pending_reauth`, nenhuma autorização v3 e nenhuma conexão Sandbox.
+
+Próximo passo humano: entrar no Mavix Hub com `jvimports.vendas@gmail.com`, clicar em `Autorizar loja de teste Shopee` e concluir o consentimento usando uma **conta/loja Shopee Sandbox**. Não usar loja real com o Test Partner ID.
+
+## Atualização de diagnóstico — 2026-07-17 17:16 BRT
+
+Após novo clique, a Shopee Sandbox respondeu:
+
+```json
+{"error":"error_sign","message":"Wrong sign."}
+```
+
+Isso confirma que o Test Partner ID `1238618` e o endpoint Sandbox são reconhecidos; a falha restante está na validação HMAC. O código usa a fórmula oficial `partner_id + /api/v2/shop/auth_partner + timestamp` com HMAC-SHA256.
+
+Evidências seguras:
+
+- o secret de Partner ID foi atualizado em `2026-07-17T14:30:48Z`;
+- o secret de Partner Key foi atualizado em `2026-07-17T14:40:51Z`;
+- o banco legado contém chaves de apps internos diferentes (`1237334` Sandbox e `2038214` Live), que não podem ser usadas com `1238618`;
+- não há espaço externo nas chaves internas legadas, mas o valor do secret Third-party não foi lido ou exposto;
+- uma sonda pública temporária foi proposta, bloqueada pela política de segurança antes do deploy e removida localmente; nenhuma função diagnóstica foi publicada.
+
+Próximo passo bloqueante: copiar novamente, diretamente do app `Mavix Hub` na Shopee Open Platform, a **Test Partner Key correspondente ao Test Partner ID `1238618`** e substituir somente o secret `SHOPEE_THIRD_PARTY_PARTNER_KEY` no projeto Supabase `qzcxukcwvjnhbnwpjceg`. Não enviar a chave por chat, Git, screenshot ou log. Depois, repetir o clique e verificar se `error_sign` desapareceu.
+
 ## Objetivo atual
 
 Concluir a validação OAuth do app `Mavix Hub` na Shopee Open Platform em Sandbox, reunir evidências e então submeter o app para Go-Live. Somente depois da aprovação e emissão das credenciais Live será possível reautorizar as lojas reais.
@@ -72,7 +111,7 @@ Migration nova:
 - RPC nova no staging: `anon=false`, `authenticated=false`, `service_role=true`.
 - advisors do staging: nenhum alerta crítico novo; INFO fail-closed em tabelas privadas e aviso conhecido de leaked-password protection.
 
-## Produção antes da continuação
+## Produção antes da continuação (histórico)
 
 Projeto Supabase: `qzcxukcwvjnhbnwpjceg`.
 
@@ -94,34 +133,17 @@ O usuário aprovou continuar com:
 4. deploy do frontend corretivo na Netlify;
 5. ativação controlada do OAuth em modo Sandbox.
 
-## Próximas ações exatas
+## Próximas ações exatas (atualizadas)
 
-1. Incluir este checkpoint na PR #4, aguardar o CI e confirmar que os checks passaram.
-2. Marcar a PR #4 pronta e fazer merge com o SHA atualizado do head.
-3. Aguardar o workflow pós-merge de `main`.
-4. Aplicar `segregate_shopee_oauth_v3_environment` em produção via Supabase `apply_migration`.
-5. Definir em produção, sem exibir valores:
-   - `SHOPEE_THIRD_PARTY_ENVIRONMENT=sandbox`;
-   - manter `MAVIS_SHOPEE_V3_ENABLED=false` durante o deploy.
-6. Publicar em produção:
-   - `shopee-oauth-v3` com JWT;
-   - `shopee-oauth-callback-v3` sem JWT (callback público com state/code validation);
-   - `shopee-sync-v3` com JWT;
-   - `mavis-integrations-v1` com JWT.
-7. Fazer smoke test do callback com a flag desligada; deve retornar `connection_unavailable` para o domínio oficial.
-8. Confirmar que a árvore local corresponde à árvore de `main` e publicar o frontend na Netlify com contexto production.
-9. Verificar no bundle público as mensagens `Sandbox`, `Autorizar loja de teste Shopee` e o aviso de que dados reais não são aceitos.
-10. Ativar `MAVIS_SHOPEE_V3_ENABLED=true`.
-11. Smoke test do callback sem parâmetros deve avançar de `connection_unavailable` para `callback_invalid`, provando que a flag está ativa.
-12. Pedir ao usuário para clicar em `Autorizar loja de teste Shopee` e usar uma conta/loja Sandbox. Uma conta Shopee real não funcionará neste estágio.
-13. Após o retorno de sucesso, verificar:
+1. Pedir ao usuário para clicar em `Autorizar loja de teste Shopee` e usar uma conta/loja Sandbox. Uma conta Shopee real não funcionará neste estágio.
+2. Após o retorno de sucesso, verificar:
    - autorização `environment='sandbox'`;
    - conexão `environment='sandbox'`;
    - tokens presentes apenas no Vault/private;
    - nenhuma resposta/log contendo access ou refresh token;
    - refresh-token e sync de catálogo/pedidos/financeiro/Ads conforme disponibilidade do Sandbox.
-14. Reunir screenshots/evidências e submeter o app para Go-Live na Shopee Open Platform.
-15. Após aprovação, cadastrar credenciais Live separadas, definir `SHOPEE_THIRD_PARTY_ENVIRONMENT=live`, validar uma loja interna e somente então migrar as lojas reais.
+3. Reunir screenshots/evidências e submeter o app para Go-Live na Shopee Open Platform.
+4. Após aprovação, cadastrar credenciais Live separadas, definir `SHOPEE_THIRD_PARTY_ENVIRONMENT=live`, validar uma loja interna e somente então migrar as lojas reais.
 
 ## Bloqueio humano esperado
 
