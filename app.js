@@ -1497,7 +1497,7 @@ async function fetchUserShops() {
     // Fallback if edge function fetch failed or returned empty
     if (userShops.length === 0) {
       const { data, error } = await supabaseClient
-        .from('shopee_shops')
+        .from('shopee_shops_safe')
         .select('shop_id, shop_name, updated_at')
         .order('shop_name', { ascending: true });
       if (!error && data) {
