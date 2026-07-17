@@ -353,15 +353,15 @@ returns table(
 )
 language sql security definer set search_path = ''
 as $$
-  select authorization.partner_id,access_secret.decrypted_secret,
-         refresh_secret.decrypted_secret,authorization.access_token_expires_at,
-         authorization.refresh_token_expires_at
-  from public.shopee_authorizations authorization
+  select authz.partner_id,access_secret.decrypted_secret,
+         refresh_secret.decrypted_secret,authz.access_token_expires_at,
+         authz.refresh_token_expires_at
+  from public.shopee_authorizations authz
   join private.shopee_authorization_tokens token
-    on token.authorization_id=authorization.id
+    on token.authorization_id=authz.id
   join vault.decrypted_secrets access_secret on access_secret.id=token.access_token_secret_id
   join vault.decrypted_secrets refresh_secret on refresh_secret.id=token.refresh_token_secret_id
-  where authorization.id=p_authorization_id and authorization.status='active';
+  where authz.id=p_authorization_id and authz.status='active';
 $$;
 
 create or replace function public.rotate_shopee_authorization_tokens_v3(

@@ -17,7 +17,10 @@ class HttpError extends Error {
 
 function cors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) || /^https:\/\/[a-z0-9-]+--mavis-hub\.netlify\.app$/i.test(origin);
+  const allowed = ALLOWED_ORIGINS.has(origin)
+    || /^https:\/\/[a-z0-9-]+--mavis-hub\.netlify\.app$/i.test(origin)
+    || origin === "https://mavis-review--ecommerce-control-jv.netlify.app"
+    || origin === "https://ecommerce-control-jv.netlify.app";
   return {
     "Access-Control-Allow-Origin": allowed ? origin : new URL(DEFAULT_ORIGIN).origin,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -91,8 +94,8 @@ async function bootstrap(userId: string, accountId: unknown) {
 
   const [stockRecords, productRecords, kitRecords, lastStock, lastCatalog] = await Promise.all([
     countRows("upseller_stock_snapshot", member.account_id), countRows("upseller_product_snapshot", member.account_id),
-    countRows("upseller_kit_snapshot", member.account_id), latest("upseller_stock_imports", "completed_at", member.account_id),
-    latest("upseller_catalog_imports", "completed_at", member.account_id)
+    countRows("upseller_kit_snapshot", member.account_id), latest("upseller_stock_imports", "imported_at", member.account_id),
+    latest("upseller_catalog_imports", "imported_at", member.account_id)
   ]);
   const upsellerLastSync = [lastStock, lastCatalog].filter(Boolean).sort().at(-1) ?? null;
 

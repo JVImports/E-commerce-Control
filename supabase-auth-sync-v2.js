@@ -103,7 +103,7 @@
     if (typeof window.switchView === 'function') window.switchView('setup');
   }
 
-  async function showDashboard() {
+  async function showDashboard(user) {
     var app = byId('app-container');
     var login = byId('login-container');
     if (login) login.style.display = 'none';
@@ -116,7 +116,7 @@
     }
     var reviewMode = new URLSearchParams(window.location.search).get('review') === 'shopee';
     if (typeof window.switchView === 'function') window.switchView(reviewMode ? 'shopee-sync' : 'dashboard');
-    refreshUserChrome();
+    refreshUserChrome(user);
   }
 
   function clearLegacyDemoSession() {
@@ -131,7 +131,7 @@
     var avatar = document.querySelector('.avatar');
     var metadata = user && user.app_metadata ? user.app_metadata : {};
     var userMetadata = user && user.user_metadata ? user.user_metadata : {};
-    var name = userMetadata.full_name || userMetadata.name || (user && user.email) || 'Usuário Mavis';
+    var name = userMetadata.full_name || userMetadata.name || (user && user.email) || 'Usuário Mavix Hub';
     var role = String(metadata.role || metadata.account_role || 'autenticado').toUpperCase();
     if (profileName) profileName.innerText = name;
     if (profileRole) profileRole.innerText = role;
@@ -172,7 +172,7 @@
       refreshUserChrome(session.user);
       document.documentElement.dataset.mavisBootState = 'authenticated';
       window.dispatchEvent(new CustomEvent('mavis:auth-changed', { detail: { user: session.user } }));
-      setTimeout(function () { showDashboard(); }, 200);
+      setTimeout(function () { showDashboard(session.user); }, 200);
     } catch (error) {
       sessionStorage.removeItem('jv_real_supabase_auth');
       setLoginMessage(error.message || 'Falha ao validar o acesso.', 'error');
@@ -220,7 +220,11 @@
       + '</div>';
 
     if (health) health.insertAdjacentElement('beforebegin', panel);
-    else view.querySelector('.panel-card').appendChild(panel);
+    else {
+      var panelCard = view.querySelector('.panel-card');
+      if (!panelCard) return;
+      panelCard.appendChild(panel);
+    }
 
     panel.addEventListener('click', function (event) {
       var button = event.target.closest('[data-jv-sync-action]');
@@ -485,7 +489,6 @@
   async function hydrate() {
     clearLegacyDemoSession();
     setDefaultSyncV2Url();
-    ensureSyncPanel();
     var user = await getSessionUser();
     if (!user) {
       sessionStorage.removeItem('jv_real_supabase_auth');
@@ -494,6 +497,8 @@
     }
     sessionStorage.setItem('jv_real_supabase_auth', 'true');
     refreshUserChrome(user);
+    var appRole = String((user.app_metadata || {}).role || (user.app_metadata || {}).account_role || '').toUpperCase();
+    if (appRole !== 'CLIENT') ensureSyncPanel();
     await refreshV2Status({ silent: true });
     await renderLogsAndModules();
   }

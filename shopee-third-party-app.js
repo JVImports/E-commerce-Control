@@ -50,7 +50,7 @@
     }).join('');
     return '<article class="mavis-integration-card">' +
       '<header><div><span class="mavis-provider">' + escapeHtml(integration.display_name || integration.provider) + '</span>' +
-      '<h3>' + escapeHtml(integration.provider === 'upseller' ? 'Importação de dados UPSeller' : 'Canal Shopee conectado') + '</h3></div>' +
+      '<h3>' + escapeHtml(integration.provider === 'upseller' ? 'Importação de dados UPSeller' : 'Fluxo de integração Shopee') + '</h3></div>' +
       '<span class="mavis-status is-' + escapeHtml(integration.status) + '">' + escapeHtml(statusLabel(integration.status)) + '</span></header>' +
       '<p>Última atualização: <strong>' + escapeHtml(dateLabel(integration.last_sync_at)) + '</strong></p>' +
       (shops ? '<div class="mavis-shop-list">' + shops + '</div>' : '') +
@@ -80,7 +80,7 @@
     var view = byId('shopee-sync-view');
     if (!view) return;
     view.innerHTML = '<section class="mavis-integrations"><div class="mavis-integrations-heading"><div><h2>Integrações</h2>' +
-      '<p>Acompanhe a disponibilidade dos canais e a atualização dos dados usados pelo Mavis.</p></div>' +
+      '<p>Acompanhe a disponibilidade dos canais e a atualização dos dados usados pelo Mavix Hub.</p></div>' +
       '<span id="mavis-integrations-account"></span></div><div id="mavis-integrations-content"></div></section>';
     window.addEventListener('mavis:auth-restored', refresh);
     window.addEventListener('mavis:auth-changed', refresh);

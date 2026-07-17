@@ -1,23 +1,35 @@
-# Shopee third-party resubmission runbook
+# Reenvio do perfil Third-party — Shopee
 
-## Reviewer journey
+## Jornada do revisor
 
-Use `https://mavis-hub.netlify.app/?review=shopee`. Test the credentials in a private browser immediately before submission. Login must open **Integrações**, showing active Shopee and UPSeller cards, shops/modules, record counts and recent timestamps. The account is read-only and must require no Supabase details, installation or additional login.
+Usar, após a publicação final, `https://ecommerce-control-jv.netlify.app/?review=shopee`. A URL deve abrir o login e, com a conta de teste, levar diretamente a **Integrações**. O revisor deve ver o canal Shopee em acompanhamento e o UPSeller ETL ativo, com contagens e atualização recente. A conta é somente leitura e não exige instalação, dados do Supabase nem outro login.
 
-## Form guidance
+Antes do envio, repetir o teste em sessão anônima e rede externa. Não usar o subdomínio `mavis-review--...` no formulário: ele é apenas um preview de validação.
 
-- Product: **Mavis**, operated by JV IMPORTS LTDA, CNPJ 53.642.321/0001-56.
-- Select only services visibly demonstrated in the reviewer account.
-- Remove TikTok. Describe UPSeller as controlled XLSX/CSV ETL, never as an API integration.
-- Do not request unmasked PII or claim a penetration-test report that does not exist.
-- Suggested remarks: “Mavis is a live multi-tenant hub for marketplace sellers, operated by JV IMPORTS LTDA. Sign in with the test credentials, open ‘Integrações’, and verify the active Shopee and UPSeller integrations, their stores, modules, last synchronization and imported records. The test account is read-only and requires no installation or additional login. UPSeller is integrated through a controlled XLSX/CSV ETL workflow. We do not request access to unmasked PII.”
+## Correções obrigatórias do formulário
 
-## Evidence checklist
+- Selecionar **Third-party Partner Platform**.
+- Copiar razão social, CNPJ, município, CEP e endereço exatamente do comprovante oficial. No endereço, incluir logradouro, número, complemento, bairro e estado.
+- Remover **TikTok**. Declarar somente uma plataforma que o revisor consiga verificar no produto.
+- Para UPSeller, escrever **controlled XLSX/CSV ETL integration**; não afirmar integração por API.
+- Selecionar somente serviços demonstráveis. Para esta submissão: gestão de produtos/listagens, estoque e análise de dados. Não selecionar Chat nem acesso a PII não mascarada.
+- Informar a quantidade real de sellers atendidos; não usar faixa inflada.
+- Anexar documento empresarial atual, legível e no formato JPG/JPEG solicitado.
+- Não declarar relatório de pentest se ele não existe e não anexar arquivo fictício.
 
-- Current one-page official CNPJ proof.
-- Login, Integrações and module screenshots with PII masked.
-- Short video: login → Integrações → modules; never display password or PII.
-- Shopee sync under 24 hours and completed UPSeller import.
-- Production URL, HTTPS and reviewer credentials verified immediately before submission.
+## Texto sugerido para Remarks
 
-Keep evidence outside Git. Rotate the previously exposed reviewer password and revoke old sessions. Only the account owner enters the password and performs the final Shopee submission.
+> Mavix Hub is a live multi-tenant operations hub for marketplace sellers, operated by JV IMPORTS LTDA. Sign in with the dedicated test account; the system opens the Integrations page automatically. The reviewer can verify the Shopee integration workflow and the active UPSeller controlled XLSX/CSV ETL, including modules, record counts and recent update timestamps. The account is read-only, requires no installation or additional login, and contains no real customer personal data. We do not request access to unmasked PII.
+
+## Evidências
+
+- Comprovante empresarial atual em JPG/JPEG.
+- Tela de login, página Integrações e módulos UPSeller com informações pessoais ocultadas.
+- Vídeo curto: abrir URL → login → Integrações → contagens/atualização → logout. Nunca mostrar a senha.
+- Resultado HTTPS/TLS 1.2 e cabeçalhos de segurança.
+- Política de Privacidade pública.
+- E-mail e telefone cadastrados monitorados durante a análise.
+
+## Segurança das credenciais
+
+A senha antiga apareceu nos PDFs da reprovação e deve ser considerada comprometida. Antes do reenvio, alterar a senha da conta de avaliação e revogar sessões antigas. Não salvar a nova senha no Git, documentação, prints, vídeo ou conversa; o titular deve digitá-la diretamente no formulário.
