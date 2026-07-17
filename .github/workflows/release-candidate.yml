@@ -47,4 +47,3 @@ jobs:
         run: git ls-files -z '*.js' '*.mjs' | xargs -0 -n 1 node --check
       - name: Run release contract tests
         run: node --test tests/release-contract.test.mjs
-

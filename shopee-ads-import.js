@@ -233,4 +233,3 @@
   if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })();
-

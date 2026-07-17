@@ -71,4 +71,3 @@ for (const match of html.matchAll(assetPattern)) {
 }
 
 console.log("Release validation passed: allowlist, assets, script order, copy and secret scan are clean.");
-

@@ -29,4 +29,3 @@ const runtimeConfig = { supabaseUrl, publishableKey, environment, reviewPath: "/
 const serialized = JSON.stringify(runtimeConfig).replaceAll("<", "\\u003c");
 await writeFile(join(dist, generatedPublicFiles[0]), `window.MAVIS_RUNTIME_CONFIG = Object.freeze(${serialized});\n`, "utf8");
 console.log(`Built dist with ${publicFiles.length + generatedPublicFiles.length} allowlisted public files.`);
-
