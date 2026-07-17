@@ -8,7 +8,7 @@ const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
 const PARTNER_ORIGIN = "https://partner.shopeemobile.com";
 const TOKEN_PATH = "/api/v2/auth/token/get";
 const APP_RETURN_URL = Deno.env.get("APP_RETURN_URL") ??
-  "https://mavis-hub.netlify.app/";
+  "https://ecommerce-control-jv.netlify.app/";
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error("Missing Supabase environment variables");
