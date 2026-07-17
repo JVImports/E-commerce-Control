@@ -1,11 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import { resolveShopeeV3Environment } from "../_shared/shopee-v3-environment.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PARTNER_ID = Number(Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_ID") ?? "0");
 const PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
 const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
-const PARTNER_ORIGIN = "https://partner.shopeemobile.com";
+const SHOPEE_ENVIRONMENT = resolveShopeeV3Environment(Deno.env.get("SHOPEE_THIRD_PARTY_ENVIRONMENT"));
+const PARTNER_ORIGIN = SHOPEE_ENVIRONMENT.partnerOrigin;
 const TOKEN_PATH = "/api/v2/auth/token/get";
 const APP_RETURN_URL = Deno.env.get("APP_RETURN_URL") ??
   "https://ecommerce-control-jv.netlify.app/";
@@ -128,6 +130,7 @@ Deno.serve(async (req) => {
     const { data: result, error: finalizeError } = await supabase.rpc("finalize_shopee_oauth_v3", {
       p_state_hash: stateHash,
       p_partner_id: PARTNER_ID,
+      p_environment: SHOPEE_ENVIRONMENT.environment,
       p_access_token: String(token.access_token),
       p_refresh_token: String(token.refresh_token),
       p_access_expires_at: accessExpiresAt,

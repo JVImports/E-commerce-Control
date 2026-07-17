@@ -16,6 +16,27 @@ test('OAuth v3 uses the production return origin and server-side credentials', a
   assert.match(callback, /finalize_shopee_oauth_v3/);
 });
 
+test('Test Partner ID can use Sandbox without being sent to the Live endpoint', async () => {
+  const [environment, oauth, callback, sync, migration] = await Promise.all([
+    read('../supabase/functions/_shared/shopee-v3-environment.ts'),
+    read('../supabase/functions/shopee-oauth-v3/index.ts'),
+    read('../supabase/functions/shopee-oauth-callback-v3/index.ts'),
+    read('../supabase/functions/shopee-sync-v3/index.ts'),
+    read('../supabase/migrations/20260717193756_segregate_shopee_oauth_v3_environment.sql')
+  ]);
+  for (const source of [oauth, callback, sync]) {
+    assert.match(source, /SHOPEE_THIRD_PARTY_ENVIRONMENT/);
+    assert.match(source, /resolveShopeeV3Environment/);
+  }
+  assert.match(environment, /partner\.test-stable\.shopeemobile\.com/);
+  assert.match(environment, /environment !== "live" && environment !== "sandbox"/);
+  assert.match(oauth, /environment/);
+  assert.match(callback, /p_environment/);
+  assert.match(sync, /\.eq\("environment", SHOPEE_ENVIRONMENT\.environment\)/);
+  assert.match(migration, /connection\.environment=p_environment/);
+  assert.match(migration, /'third_party_v3_'\|\|p_environment/);
+});
+
 test('sync v3 reads Vault credentials and supports the launch modules', async () => {
   const sync = await read('../supabase/functions/shopee-sync-v3/index.ts');
   assert.match(sync, /get_shopee_authorization_tokens_v3/);
