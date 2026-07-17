@@ -5,3 +5,12 @@ supabase-go.exe
 .netlify/
 node_modules/
 .env
+.env.local
+dist/
+supabase/.temp/
+/Falha de Aprovação/
+/tmp/
+/.worktrees/
+*.dump
+*.sql.backup
+*.mp4

@@ -1,6 +1,7 @@
 // State management
-let supabaseUrl = localStorage.getItem('supabase_url');
-let supabaseKey = localStorage.getItem('supabase_key');
+const mavisRuntimeConfig = Object.freeze(window.MAVIS_RUNTIME_CONFIG || {});
+let supabaseUrl = String(mavisRuntimeConfig.supabaseUrl || '').trim();
+let supabaseKey = String(mavisRuntimeConfig.publishableKey || '').trim();
 let supabaseClient = null;
 let activeView = 'dashboard';
 let stockPlanningData = [];
@@ -48,16 +49,21 @@ const viewSubtitle = document.getElementById('view-subtitle');
 // Initialize App
 window.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
+  ['setup-view', 'config-view'].forEach((id) => document.getElementById(id)?.remove());
   
   if (!supabaseUrl || !supabaseKey) {
-    // Force setup view
+    document.documentElement.dataset.mavisBootState = 'fatal-config';
     document.getElementById('app-container').style.display = 'none';
-    document.getElementById('login-container').style.display = 'none';
-    switchView('setup');
+    document.getElementById('login-container').style.display = 'flex';
+    document.getElementById('login-title').innerText = 'Serviço temporariamente indisponível';
+    document.getElementById('login-subtitle').innerText = 'Não foi possível iniciar o ambiente. Tente novamente mais tarde.';
+    document.getElementById('login-form-fields').style.display = 'none';
+    window.dispatchEvent(new CustomEvent('mavis:fatal-config'));
   } else {
+    document.documentElement.dataset.mavisBootState = 'booting';
     initSupabase();
     
-    // Check URL parameters for Shopee OAuth code redirection
+    // Check URL parameters returned by Shopee authorization
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const shopId = urlParams.get('shop_id');
@@ -66,6 +72,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       const { data: { session }, error } = await supabaseClient.auth.getSession();
       if (!error && session) {
+        document.documentElement.dataset.mavisBootState = 'authenticated';
         document.getElementById('login-container').style.display = 'none';
         document.getElementById('app-container').style.display = 'flex';
         
@@ -78,8 +85,11 @@ window.addEventListener('DOMContentLoaded', async () => {
         }
         
         await loadAllData();
-        switchView('dashboard');
+        const reviewMode = new URLSearchParams(window.location.search).get('review') === 'shopee';
+        switchView(reviewMode ? 'shopee-sync' : 'dashboard');
+        window.dispatchEvent(new CustomEvent('mavis:auth-restored', { detail: { user: session.user } }));
       } else {
+        document.documentElement.dataset.mavisBootState = 'unauthenticated';
         document.getElementById('app-container').style.display = 'none';
         document.getElementById('login-container').style.display = 'flex';
       }
@@ -87,6 +97,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       console.error("Auth check failed:", err);
       document.getElementById('app-container').style.display = 'none';
       document.getElementById('login-container').style.display = 'flex';
+      document.documentElement.dataset.mavisBootState = 'unauthenticated';
     }
   }
   
@@ -99,10 +110,7 @@ function initSupabase() {
   if (supabaseUrl && supabaseKey) {
     const { createClient } = supabase;
     supabaseClient = createClient(supabaseUrl, supabaseKey);
-    
-    // Fill config inputs
-    document.getElementById('config-supabase-url').value = supabaseUrl;
-    document.getElementById('text-supabase-connected').innerText = `Conectado ao banco: ${supabaseUrl}`;
+    window.supabaseClient = supabaseClient;
   }
 }
 
@@ -234,14 +242,6 @@ function switchView(viewName, element = null) {
     }
   }
 
-  // Adjust view metadata and show
-  if (!supabaseUrl || !supabaseKey) {
-    views.setup.classList.add('active');
-    viewTitle.innerText = "Configuração de Acesso";
-    viewSubtitle.innerText = "Insira as credenciais do seu Supabase para continuar.";
-    return;
-  }
-
   if (views[viewName]) {
     views[viewName].classList.add('active');
   }
@@ -249,7 +249,7 @@ function switchView(viewName, element = null) {
   switch(viewName) {
     case 'dashboard':
       viewTitle.innerText = "Dashboard Geral";
-      viewSubtitle.innerText = "Central de controle operacional da JV Imports.";
+      viewSubtitle.innerText = "HUB de gestão multiloja para sellers.";
       renderDashboardCharts();
       break;
     case 'financeiro':
@@ -273,9 +273,9 @@ function switchView(viewName, element = null) {
       viewSubtitle.innerText = "Gerenciamento do token de comunicação Supabase.";
       break;
     case 'shopee-sync':
-      viewTitle.innerText = "Integração Shopee API";
-      viewSubtitle.innerText = "Gerencie a sincronização de dados entre Shopee e Supabase.";
-      initShopeeSync();
+      viewTitle.innerText = "Integrações";
+      viewSubtitle.innerText = "Acompanhe os canais e fluxos de dados conectados à sua empresa.";
+      if (window.mavisIntegrations) window.mavisIntegrations.refresh();
       break;
   }
   
@@ -1497,7 +1497,7 @@ async function fetchUserShops() {
     // Fallback if edge function fetch failed or returned empty
     if (userShops.length === 0) {
       const { data, error } = await supabaseClient
-        .from('shopee_shops')
+        .from('shopee_shops_safe')
         .select('shop_id, shop_name, updated_at')
         .order('shop_name', { ascending: true });
       if (!error && data) {

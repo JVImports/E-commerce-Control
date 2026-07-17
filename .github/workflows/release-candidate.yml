@@ -1,0 +1,49 @@
+name: Release candidate checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build public allowlist
+        env:
+          MAVIS_SUPABASE_URL: https://ci-placeholder.supabase.co
+          MAVIS_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder_not_a_secret
+          CONTEXT: deploy-preview
+        run: node scripts/build.mjs
+      - name: Validate release contents
+        run: node scripts/validate-release.mjs
+      - name: Check clean patch
+        run: git diff --check
+      - name: Scan repository for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check all Edge Function TypeScript
+        shell: bash
+        run: find supabase/functions -name '*.ts' -print0 | xargs -0 -n 1 deno check
+      - name: Check browser JavaScript syntax
+        shell: bash
+        run: git ls-files -z '*.js' '*.mjs' | xargs -0 -n 1 node --check
+      - name: Run release contract tests
+        run: node --test tests/release-contract.test.mjs
