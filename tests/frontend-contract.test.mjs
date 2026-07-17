@@ -9,7 +9,8 @@ const integrations = await readFile(new URL('../shopee-third-party-app.js', impo
 const integrationsFunction = await readFile(new URL('../supabase/functions/mavis-integrations-v1/index.ts', import.meta.url), 'utf8');
 
 assert.ok(index.indexOf('runtime-config.js') < index.indexOf('@supabase/supabase-js'));
-assert.match(index, /assets\/mavis-logo-v2\.png/);
+assert.match(index, /Logo-Mavix-Hub\.png/);
+assert.doesNotMatch(index, /mavis-logo-v2\.png/);
 assert.match(index, /switchView\('shopee-sync'/);
 assert.match(index, /<title>Mavix Hub/);
 assert.match(index, /href="\/privacidade\.html"/);
