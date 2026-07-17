@@ -195,6 +195,7 @@
   };
 
   function ensureSyncPanel() {
+    if (window.mavisIntegrations || window.jvShopeeThirdParty) return;
     var view = byId('shopee-sync-view');
     if (!view || byId('jv-sync-v2-panel')) return;
     var health = byId('sync-health-cards');

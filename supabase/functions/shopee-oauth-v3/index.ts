@@ -10,10 +10,10 @@ const AUTH_PATH = "/api/v2/shop/auth_partner";
 const CALLBACK_URL = Deno.env.get("SHOPEE_THIRD_PARTY_REDIRECT_URI") ??
   `${SUPABASE_URL}/functions/v1/shopee-oauth-callback-v3`;
 const DEFAULT_RETURN_URL = Deno.env.get("APP_RETURN_URL") ??
-  "https://mavis-hub.netlify.app/";
+  "https://ecommerce-control-jv.netlify.app/";
 const ALLOWED_RETURN_ORIGINS = new Set(
   (Deno.env.get("APP_ALLOWED_RETURN_ORIGINS") ??
-    "https://mavis-hub.netlify.app,https://ecommerce-control-jv.netlify.app,http://localhost:8888,http://127.0.0.1:8888")
+    "https://ecommerce-control-jv.netlify.app,http://localhost:8888,http://127.0.0.1:8888")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean)

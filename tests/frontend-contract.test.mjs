@@ -22,9 +22,14 @@ assert.match(auth, /mavis:auth-restored|mavis:auth-changed/);
 assert.match(auth, /appRole !== 'CLIENT'\) ensureSyncPanel\(\)/);
 assert.match(integrations, /mavis-integrations-v1/);
 assert.match(integrations, /action: 'bootstrap'/);
-assert.match(integrations, /Fluxo de integração Shopee/);
+assert.match(integrations, /shopee-oauth-v3/);
+assert.match(integrations, /shopee-sync-v3/);
+assert.match(integrations, /Conexão oficial via OAuth/);
+assert.match(integrations, /\['owner', 'admin'\]/);
+assert.match(integrations, /Seu perfil possui acesso somente leitura/);
 assert.doesNotMatch(integrations, /Partner Key|Access Token Manual|Refresh Token Manual/i);
 assert.match(integrationsFunction, /ecommerce-control-jv\.netlify\.app/);
+assert.match(integrationsFunction, /connect: canManage, sync: canManage, disconnect: canManage/);
 assert.match(integrationsFunction, /latest\("upseller_stock_imports", "imported_at"/);
 
 console.log('Frontend contract checks passed.');

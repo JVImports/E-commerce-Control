@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.106.2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://mavis-hub.netlify.app";
+const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://ecommerce-control-jv.netlify.app";
 const ALLOWED_ORIGINS = new Set((Deno.env.get("APP_ALLOWED_RETURN_ORIGINS") ?? DEFAULT_ORIGIN)
   .split(",").map((value) => value.trim()).filter(Boolean));
 if (!SUPABASE_URL || !SERVICE_KEY) throw new Error("Missing Supabase environment variables");
@@ -18,8 +18,7 @@ class HttpError extends Error {
 function cors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
   const allowed = ALLOWED_ORIGINS.has(origin)
-    || /^https:\/\/[a-z0-9-]+--mavis-hub\.netlify\.app$/i.test(origin)
-    || origin === "https://mavis-review--ecommerce-control-jv.netlify.app"
+    || /^https:\/\/[a-z0-9-]+--ecommerce-control-jv\.netlify\.app$/i.test(origin)
     || origin === "https://ecommerce-control-jv.netlify.app";
   return {
     "Access-Control-Allow-Origin": allowed ? origin : new URL(DEFAULT_ORIGIN).origin,
@@ -76,7 +75,8 @@ async function bootstrap(userId: string, accountId: unknown) {
     .select("id,external_shop_id,shop_name,status,last_sync_at,last_error,updated_at")
     .eq("account_id", member.account_id).order("updated_at", { ascending: false });
   if (error) throw error;
-  const capabilities = { connect: false, sync: false, disconnect: false, import: false };
+  const canManage = ["owner", "admin"].includes(String(member.role));
+  const capabilities = { connect: canManage, sync: canManage, disconnect: canManage, import: false };
   const shops = await Promise.all((connections ?? []).map(async (connection: any) => {
     const shopId = Number(connection.external_shop_id);
     const modules = await Promise.all([
@@ -88,7 +88,7 @@ async function bootstrap(userId: string, accountId: unknown) {
       const [records, lastSync] = await Promise.all([countRows(table, member.account_id, shopId), latest(table, time, member.account_id, shopId)]);
       return { key, label, status: records > 0 ? "healthy" : "empty", last_sync_at: lastSync, records };
     }));
-    return { shop_id: shopId, name: connection.shop_name, status: connection.status, last_sync_at: connection.last_sync_at, modules };
+    return { id: connection.id, shop_id: shopId, name: connection.shop_name, status: connection.status, last_sync_at: connection.last_sync_at, modules };
   }));
   const shopeeLastSync = shops.map((shop) => shop.last_sync_at).filter(Boolean).sort().at(-1) ?? null;
 
