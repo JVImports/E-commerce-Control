@@ -9,7 +9,7 @@
   var state = {
     account: null,
     integrations: [],
-    oauth: { configured: false, connections: [] },
+    oauth: { configured: false, environment: '', connections: [] },
     loading: false,
     busy: '',
     error: '',
@@ -87,10 +87,13 @@
     var connections = state.oauth.connections || [];
     var active = connections.filter(function (connection) { return connection.status === 'active'; });
     var needsAuth = connections.some(function (connection) { return connection.status === 'legacy_pending_reauth'; });
-    var connectLabel = needsAuth ? 'Reautorizar com a Shopee' : 'Conectar loja Shopee';
+    var sandbox = state.oauth.environment === 'sandbox';
+    var connectLabel = sandbox ? (needsAuth ? 'Reautorizar loja de teste' : 'Autorizar loja de teste Shopee') :
+      (needsAuth ? 'Reautorizar com a Shopee' : 'Conectar loja Shopee');
     var connect = button(connectLabel, 'connect', { disabled: !state.oauth.configured });
-    var hint = state.oauth.configured ?
-      'A autorização acontece diretamente na Shopee. O Mavix Hub não recebe sua senha.' :
+    var hint = state.oauth.configured ? (sandbox ?
+      'Ambiente Sandbox: use somente uma conta de teste da Shopee; lojas e dados reais não são aceitos.' :
+      'A autorização acontece diretamente na Shopee. O Mavix Hub não recebe sua senha.') :
       'A conexão está em liberação controlada. Nenhuma credencial foi exposta.';
     var activeControls = active.map(function (connection) {
       return '<div class="mavis-connection-controls"><strong>' + escapeHtml(connection.shop_name || ('Loja ' + connection.external_shop_id)) + '</strong>' +
@@ -106,14 +109,15 @@
       '<small>' + escapeHtml(hint) + '</small>' + activeControls + '</div>';
   }
   function shopeeMarkup(integration) {
+    var sandbox = state.oauth.environment === 'sandbox';
     var shops = (integration.shops || []).map(function (shop) {
       var connection = connectionForShop(shop);
       var status = connection ? connection.status : shop.status;
       return '<span class="mavis-shop-pill">' + escapeHtml(shop.name || 'Loja conectada') + ' · ' +
         escapeHtml(statusLabel(status)) + '</span>';
     }).join('');
-    return '<article class="mavis-integration-card mavis-shopee-card"><header><div><span class="mavis-provider">Shopee Open Platform</span>' +
-      '<h3>Conexão oficial via OAuth</h3></div><span class="mavis-status is-' + escapeHtml(integration.status) + '">' +
+    return '<article class="mavis-integration-card mavis-shopee-card"><header><div><span class="mavis-provider">Shopee Open Platform' + (sandbox ? ' · Sandbox' : '') + '</span>' +
+      '<h3>' + (sandbox ? 'Validação oficial via OAuth' : 'Conexão oficial via OAuth') + '</h3></div><span class="mavis-status is-' + escapeHtml(integration.status) + '">' +
       escapeHtml(statusLabel(integration.status)) + '</span></header>' +
       '<p>Última atualização: <strong>' + escapeHtml(dateLabel(integration.last_sync_at)) + '</strong></p>' +
       (shops ? '<div class="mavis-shop-list">' + shops + '</div>' : '<p class="mavis-muted">Nenhuma loja autorizada ainda.</p>') +
@@ -157,7 +161,7 @@
       state.account = data.account || null;
       state.integrations = Array.isArray(data.integrations) ? data.integrations : [];
       var oauth = await invoke(FUNCTIONS.oauth, { action: 'bootstrap' });
-      state.oauth = { configured: Boolean(oauth.configured), connections: Array.isArray(oauth.connections) ? oauth.connections : [] };
+      state.oauth = { configured: Boolean(oauth.configured), environment: String(oauth.environment || ''), connections: Array.isArray(oauth.connections) ? oauth.connections : [] };
     } catch (error) { state.error = error.message; }
     finally { state.loading = false; render(); }
   }

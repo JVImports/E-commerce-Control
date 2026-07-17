@@ -1,7 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import { resolveShopeeV3Environment } from "../_shared/shopee-v3-environment.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const SHOPEE_ENVIRONMENT = resolveShopeeV3Environment(Deno.env.get("SHOPEE_THIRD_PARTY_ENVIRONMENT"));
 const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://ecommerce-control-jv.netlify.app";
 const ALLOWED_ORIGINS = new Set((Deno.env.get("APP_ALLOWED_RETURN_ORIGINS") ?? DEFAULT_ORIGIN)
   .split(",").map((value) => value.trim()).filter(Boolean));
@@ -73,7 +75,9 @@ async function bootstrap(userId: string, accountId: unknown) {
   const account = member.accounts;
   const { data: connections, error } = await admin.from("shopee_connections")
     .select("id,external_shop_id,shop_name,status,last_sync_at,last_error,updated_at")
-    .eq("account_id", member.account_id).order("updated_at", { ascending: false });
+    .eq("account_id", member.account_id)
+    .eq("environment", SHOPEE_ENVIRONMENT.environment)
+    .order("updated_at", { ascending: false });
   if (error) throw error;
   const canManage = ["owner", "admin"].includes(String(member.role));
   const capabilities = { connect: canManage, sync: canManage, disconnect: canManage, import: false };
@@ -102,7 +106,7 @@ async function bootstrap(userId: string, accountId: unknown) {
   return {
     account: { id: account.id, name: account.name, role: member.role },
     integrations: [
-      { provider: "shopee", display_name: "Shopee", status: shops.some((s) => s.status === "active") ? "active" : "inactive", last_sync_at: shopeeLastSync, shops, capabilities },
+      { provider: "shopee", display_name: "Shopee", environment: SHOPEE_ENVIRONMENT.environment, status: shops.some((s) => s.status === "active") ? "active" : "inactive", last_sync_at: shopeeLastSync, shops, capabilities },
       { provider: "upseller", display_name: "UPSeller ETL", description: "Integração ETL controlada por arquivos XLSX/CSV.", status: stockRecords + productRecords + kitRecords > 0 ? "active" : "inactive", last_sync_at: upsellerLastSync,
         modules: [
           { key: "stock", label: "Estoque", status: stockRecords ? "healthy" : "empty", last_sync_at: lastStock, records: stockRecords },

@@ -1,11 +1,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import { resolveShopeeV3Environment } from "../_shared/shopee-v3-environment.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const PARTNER_ID = Number(Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_ID") ?? "0");
 const PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
 const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
-const PARTNER_ORIGIN = "https://partner.shopeemobile.com";
+const SHOPEE_ENVIRONMENT = resolveShopeeV3Environment(Deno.env.get("SHOPEE_THIRD_PARTY_ENVIRONMENT"));
+const PARTNER_ORIGIN = SHOPEE_ENVIRONMENT.partnerOrigin;
 const AUTH_PATH = "/api/v2/shop/auth_partner";
 const CALLBACK_URL = Deno.env.get("SHOPEE_THIRD_PARTY_REDIRECT_URI") ??
   `${SUPABASE_URL}/functions/v1/shopee-oauth-callback-v3`;
@@ -126,14 +128,15 @@ async function resolveMembership(userId: string, accountId: unknown, requireMana
 async function bootstrap(userId: string) {
   const memberships = await getMemberships(userId);
   const accountIds = memberships.map((row) => row.account_id);
-  if (!accountIds.length) return { accounts: [], connections: [], configured: isConfigured() };
+  if (!accountIds.length) return { accounts: [], connections: [], configured: isConfigured(), environment: SHOPEE_ENVIRONMENT.environment };
 
   const [{ data: accounts, error: accountError }, { data: connections, error: connectionError }] =
     await Promise.all([
       supabase.from("accounts").select("id,name,status").in("id", accountIds),
       supabase.from("shopee_connections")
-        .select("id,account_id,external_shop_id,shop_name,region,status,authorized_at,last_sync_at,last_error,updated_at")
+        .select("id,account_id,environment,external_shop_id,shop_name,region,status,authorized_at,last_sync_at,last_error,updated_at")
         .in("account_id", accountIds)
+        .eq("environment", SHOPEE_ENVIRONMENT.environment)
         .order("updated_at", { ascending: false })
     ]);
   if (accountError) throw accountError;
@@ -142,6 +145,7 @@ async function bootstrap(userId: string) {
   const roleByAccount = new Map(memberships.map((row) => [String(row.account_id), row.role]));
   return {
     configured: isConfigured(),
+    environment: SHOPEE_ENVIRONMENT.environment,
     callback_url: CALLBACK_URL,
     accounts: (accounts ?? []).map((account) => ({
       ...account,
@@ -183,6 +187,7 @@ async function startAuthorization(userId: string, body: Record<string, unknown>)
   return {
     ok: true,
     account_id: membership.account_id,
+    environment: SHOPEE_ENVIRONMENT.environment,
     authorization_url: authorization.toString(),
     expires_at: expiresAt
   };
@@ -196,6 +201,7 @@ async function disconnect(userId: string, body: Record<string, unknown>) {
     .select("id,account_id")
     .eq("id", connectionId)
     .eq("account_id", membership.account_id)
+    .eq("environment", SHOPEE_ENVIRONMENT.environment)
     .maybeSingle();
   if (error) throw error;
   if (!connection) throw new HttpError(404, "Conexão Shopee não encontrada.");

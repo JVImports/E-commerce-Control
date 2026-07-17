@@ -1,11 +1,16 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import {
+  resolveShopeeV3Environment,
+  SHOPEE_LIVE_ADS_ORIGIN,
+  SHOPEE_LIVE_PARTNER_ORIGIN,
+  SHOPEE_SANDBOX_PARTNER_ORIGIN
+} from "../_shared/shopee-v3-environment.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const ENV_PARTNER_ID = Number(Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_ID") ?? "0");
 const ENV_PARTNER_KEY = Deno.env.get("SHOPEE_THIRD_PARTY_PARTNER_KEY") ?? "";
-const ENV_BASE_URL = Deno.env.get("SHOPEE_BASE_URL") ?? "https://partner.shopeemobile.com";
-const ENV_ADS_BASE_URL = Deno.env.get("SHOPEE_ADS_BASE_URL") ?? "https://openplatform.shopee.com.br";
+const SHOPEE_ENVIRONMENT = resolveShopeeV3Environment(Deno.env.get("SHOPEE_THIRD_PARTY_ENVIRONMENT"));
 const V3_ENABLED = Deno.env.get("MAVIS_SHOPEE_V3_ENABLED") === "true";
 const DEFAULT_ORIGIN = Deno.env.get("APP_RETURN_URL") ?? "https://ecommerce-control-jv.netlify.app";
 const ALLOWED_ORIGINS = new Set(
@@ -15,8 +20,8 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 const SHOPEE_REQUEST_DELAY_MS = Number(Deno.env.get("SHOPEE_REQUEST_DELAY_MS") ?? "300");
-const PARTNER_ORIGINS = new Set(["https://partner.shopeemobile.com"]);
-const ADS_ORIGINS = new Set(["https://openplatform.shopee.com.br"]);
+const PARTNER_ORIGINS = new Set([SHOPEE_LIVE_PARTNER_ORIGIN, SHOPEE_SANDBOX_PARTNER_ORIGIN]);
+const ADS_ORIGINS = new Set([SHOPEE_LIVE_ADS_ORIGIN, SHOPEE_SANDBOX_PARTNER_ORIGIN]);
 
 class HttpError extends Error {
   status: number;
@@ -46,6 +51,7 @@ type ShopRow = {
   id: string;
   connection_id: string;
   authorization_id: string;
+  environment: "live" | "sandbox";
   user_id: string;
   account_id: string;
   shop_id: number;
@@ -260,6 +266,7 @@ function safeShop(shop: any) {
     connection_id: String(shop.id),
     accountId: String(shop.account_id),
     account_id: String(shop.account_id),
+    environment: String(shop.environment),
     shopId: Number(shop.shop_id),
     shop_id: Number(shop.shop_id),
     shopName: shop.shop_name,
@@ -310,8 +317,9 @@ async function listShops(userId: string, requestedAccountId?: string) {
   if (!allowed.length) return [];
   const { data, error } = await supabase
     .from("shopee_connections")
-    .select("id,account_id,authorization_id,external_shop_id,shop_name,status,last_sync_at,last_error,updated_at")
+    .select("id,account_id,authorization_id,environment,external_shop_id,shop_name,status,last_sync_at,last_error,updated_at")
     .in("account_id", allowed)
+    .eq("environment", SHOPEE_ENVIRONMENT.environment)
     .order("updated_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((row) => safeShop({
@@ -326,9 +334,10 @@ async function loadShop(userId: string, accountId: string, connectionId: string)
   await membership(userId, accountId);
   const { data: connection, error } = await supabase
     .from("shopee_connections")
-    .select("id,authorization_id,account_id,external_shop_id,shop_name,status,authorized_by_user_id")
+    .select("id,authorization_id,account_id,environment,external_shop_id,shop_name,status,authorized_by_user_id")
     .eq("id", connectionId)
     .eq("account_id", accountId)
+    .eq("environment", SHOPEE_ENVIRONMENT.environment)
     .maybeSingle();
   if (error) throw error;
   if (!connection) throw new HttpError(404, "ConexÃ£o Shopee nÃ£o encontrada.");
@@ -348,6 +357,7 @@ async function loadShop(userId: string, accountId: string, connectionId: string)
     id: String(connection.id),
     connection_id: String(connection.id),
     authorization_id: String(connection.authorization_id),
+    environment: connection.environment as "live" | "sandbox",
     user_id: String(connection.authorized_by_user_id || userId),
     account_id: String(connection.account_id),
     shop_id: Number(connection.external_shop_id),
@@ -381,8 +391,8 @@ async function loadCredential(shop: ShopRow): Promise<ShopeeCredential> {
   return {
     partnerId,
     partnerKey: ENV_PARTNER_KEY,
-    baseUrl: cleanBaseUrl(ENV_BASE_URL, "https://partner.shopeemobile.com", PARTNER_ORIGINS),
-    adsBaseUrl: cleanBaseUrl(ENV_ADS_BASE_URL, "https://openplatform.shopee.com.br", ADS_ORIGINS),
+    baseUrl: cleanBaseUrl(SHOPEE_ENVIRONMENT.partnerOrigin, SHOPEE_ENVIRONMENT.partnerOrigin, PARTNER_ORIGINS),
+    adsBaseUrl: cleanBaseUrl(SHOPEE_ENVIRONMENT.adsOrigin, SHOPEE_ENVIRONMENT.adsOrigin, ADS_ORIGINS),
     source: "third_party_v3"
   };
 }
@@ -1079,6 +1089,7 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
       action,
       version: "2026-07-17.third-party-oauth-v3",
       enabled: V3_ENABLED,
+      environment: SHOPEE_ENVIRONMENT.environment,
       connection,
       shops,
       supportedActions,
@@ -1146,6 +1157,7 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
     connectionId: shop.connection_id,
     activeShopId: Number(shop.shop_id),
     credentialSource: credential.source,
+    environment: shop.environment,
     completedAt,
     result
   };
