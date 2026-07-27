@@ -1468,6 +1468,78 @@ async function initShopeeSync() {
   await fetchUserShops();
 }
 
+function shopSelectorLabel(shop) {
+  const id = String(shop.shop_id || '');
+  const base = String(shop.shop_name || '').trim();
+  const duplicate = base && userShops.filter(item =>
+    String(item.shop_name || '').trim().toLowerCase() === base.toLowerCase()
+  ).length > 1;
+  const generic = !base || /^loja principal$/i.test(base) || /^loja conectada$/i.test(base);
+  const name = generic || duplicate ? `Shopee · Loja ${id}` : base;
+  if (shop.connection_status === 'legacy_pending_reauth') return `${name} — histórico`;
+  if (shop.connection_status === 'active') return `${name} — conectada`;
+  return name;
+}
+
+function renderMarketplaceScope() {
+  const banner = document.getElementById('marketplace-scope-banner');
+  if (!banner) return;
+  const selected = userShops.find(shop => String(shop.shop_id) === String(selectedShop));
+  const pending = userShops.filter(shop => shop.connection_status === 'legacy_pending_reauth');
+  let title = '';
+  let message = '';
+
+  if (selectedShop === 'all' && pending.length) {
+    title = 'O consolidado inclui dados históricos';
+    message = `${pending.length} loja${pending.length === 1 ? '' : 's'} Shopee ainda precisa${pending.length === 1 ? '' : 'm'} ser reautorizada${pending.length === 1 ? '' : 's'} para voltar a atualizar.`;
+  } else if (selected && selected.connection_status === 'legacy_pending_reauth') {
+    title = 'Visualização de dados históricos';
+    message = `${shopSelectorLabel(selected).replace(/ — histórico$/, '')} está sem atualização automática até a reautorização.`;
+  } else if (selected && selected.connection_status === 'active') {
+    title = 'Loja conectada';
+    message = `${shopSelectorLabel(selected).replace(/ — conectada$/, '')} está autorizada para atualização automática.`;
+  }
+
+  banner.classList.toggle('is-visible', Boolean(title));
+  banner.innerHTML = title ? `<div><strong>${escapeHTML(title)}</strong><span>${escapeHTML(message)}</span></div>` +
+    `<button type="button" onclick="switchView('shopee-sync')">Gerenciar lojas</button>` : '';
+}
+
+function renderShopSelector() {
+  const shopSelect = document.getElementById('select-shop');
+  if (!shopSelect) return;
+  const currentVal = selectedShop;
+  shopSelect.innerHTML = '<option value="all">Todas as Lojas (Consolidado)</option>';
+  userShops.forEach(shop => {
+    const opt = document.createElement('option');
+    opt.value = shop.shop_id;
+    opt.innerText = shopSelectorLabel(shop);
+    opt.selected = String(currentVal) === String(shop.shop_id);
+    shopSelect.appendChild(opt);
+  });
+  renderMarketplaceScope();
+}
+
+window.addEventListener('mavis:shop-connections-updated', event => {
+  const detail = event.detail || {};
+  if (detail.environment && detail.environment !== 'live') return;
+  const connections = Array.isArray(detail.connections) ? detail.connections : [];
+  userShops = connections
+    .filter(connection => connection.status !== 'revoked')
+    .map(connection => ({
+      shop_id: connection.shop_id,
+      shop_name: connection.shop_name,
+      updated_at: connection.last_sync_at,
+      connection_status: connection.status,
+      connection_id: connection.id
+    }));
+  if (selectedShop !== 'all' && !userShops.some(shop => String(shop.shop_id) === String(selectedShop))) {
+    selectedShop = 'all';
+  }
+  renderShopSelector();
+  renderShopsList();
+});
+
 async function fetchUserShops() {
   if (!supabaseClient) return;
   
@@ -1506,17 +1578,7 @@ async function fetchUserShops() {
     }
     
     // Update shop selector dropdown
-    const currentVal = selectedShop;
-    shopSelect.innerHTML = '<option value="all">Todas as Lojas (Consolidado)</option>';
-    userShops.forEach(shop => {
-      const opt = document.createElement('option');
-      opt.value = shop.shop_id;
-      opt.innerText = `${shop.shop_name} (${shop.shop_id})`;
-      if (String(currentVal) === String(shop.shop_id)) {
-        opt.selected = true;
-      }
-      shopSelect.appendChild(opt);
-    });
+    renderShopSelector();
     
     renderShopsList();
   } catch (err) {
@@ -1826,8 +1888,8 @@ async function filterDataByShop(shopId) {
   selectedShop = shopId;
   const selectShopEl = document.getElementById('select-shop');
   if (selectShopEl) selectShopEl.value = shopId;
+  renderMarketplaceScope();
   
-  await fetchUserShops(); // Refresh current select status and listings
   await loadAllData();
 }
 
