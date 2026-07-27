@@ -11,6 +11,8 @@ supabase/.temp/
 /Falha de Aprovação/
 /tmp/
 /.worktrees/
+/evidence-private/*
+!/evidence-private/README.md
 *.dump
 *.sql.backup
 *.mp4

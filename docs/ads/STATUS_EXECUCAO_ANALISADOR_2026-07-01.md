@@ -37,7 +37,7 @@ Arquivos adicionados:
 
 - `ads-analyzer.js`
 - `ads-analyzer.css`
-- `docs/STATUS_EXECUCAO_ANALISADOR_2026-07-01.md`
+- `docs/ads/STATUS_EXECUCAO_ANALISADOR_2026-07-01.md`
 
 Arquivos alterados:
 
