@@ -13,7 +13,8 @@
     loading: false,
     busy: '',
     error: '',
-    notice: ''
+    notice: '',
+    catalogOpen: false
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -39,6 +40,40 @@
       inactive: 'Inativa', empty: 'Sem dados', revoked: 'Desconectada',
       legacy_pending_reauth: 'Reautorização necessária'
     }[status] || 'Em acompanhamento';
+  }
+  function connectionName(connection, connections) {
+    var base = String(connection.shop_name || '').trim();
+    var generic = !base || /^loja principal$/i.test(base) || /^loja conectada$/i.test(base);
+    var duplicate = base && (connections || []).filter(function (item) {
+      return String(item.shop_name || '').trim().toLowerCase() === base.toLowerCase();
+    }).length > 1;
+    return generic || duplicate ? 'Shopee · Loja ' + connection.external_shop_id : base;
+  }
+  function shopForConnection(integration, connection) {
+    return (integration.shops || []).find(function (shop) {
+      return String(shop.shop_id) === String(connection.external_shop_id);
+    }) || null;
+  }
+  function shopRecordCount(shop) {
+    return (shop && shop.modules || []).reduce(function (total, module) {
+      return total + Number(module.records || 0);
+    }, 0);
+  }
+  function publishConnections() {
+    window.dispatchEvent(new CustomEvent('mavis:shop-connections-updated', {
+      detail: {
+        environment: state.oauth.environment,
+        connections: (state.oauth.connections || []).map(function (connection) {
+          return {
+            id: connection.id,
+            shop_id: connection.external_shop_id,
+            shop_name: connectionName(connection, state.oauth.connections),
+            status: connection.status,
+            last_sync_at: connection.last_sync_at || null
+          };
+        })
+      }
+    }));
   }
   function manager() {
     return Boolean(state.account && ['owner', 'admin'].includes(String(state.account.role || '').toLowerCase()));
@@ -82,47 +117,84 @@
     if (disabled) attrs += ' disabled';
     return '<button' + attrs + '>' + escapeHtml(state.busy === action ? 'Processando…' : label) + '</button>';
   }
-  function controlsMarkup(integration) {
-    if (!manager()) return '<p class="mavis-readonly-note">Seu perfil possui acesso somente leitura.</p>';
-    var connections = state.oauth.connections || [];
-    var active = connections.filter(function (connection) { return connection.status === 'active'; });
-    var needsAuth = connections.some(function (connection) { return connection.status === 'legacy_pending_reauth'; });
-    var sandbox = state.oauth.environment === 'sandbox';
-    var connectLabel = sandbox ? (needsAuth ? 'Reautorizar loja de teste' : 'Autorizar loja de teste Shopee') :
-      (needsAuth ? 'Reautorizar com a Shopee' : 'Conectar loja Shopee');
-    var connect = button(connectLabel, 'connect', { disabled: !state.oauth.configured });
-    var hint = state.oauth.configured ? (sandbox ?
-      'Ambiente Sandbox: use somente uma conta de teste da Shopee; lojas e dados reais não são aceitos.' :
-      'A autorização acontece diretamente na Shopee. O Mavix Hub não recebe sua senha.') :
-      'A conexão está em liberação controlada. Nenhuma credencial foi exposta.';
-    var activeControls = active.map(function (connection) {
-      return '<div class="mavis-connection-controls"><strong>' + escapeHtml(connection.shop_name || ('Loja ' + connection.external_shop_id)) + '</strong>' +
-        '<div class="mavis-action-row">' +
+  function connectionMarkup(connection, integration) {
+    var shop = shopForConnection(integration, connection);
+    var name = connectionName(connection, state.oauth.connections);
+    var active = connection.status === 'active';
+    var pending = connection.status === 'legacy_pending_reauth';
+    var records = shopRecordCount(shop);
+    var description = active ?
+      'Conexão OAuth ativa. Os dados podem ser atualizados normalmente.' :
+      pending ?
+        'Dados históricos preservados. Reautorize esta loja para voltar a atualizar.' :
+        'Esta conexão não está atualizando dados no momento.';
+    var actions = '';
+    if (manager() && active) {
+      actions = '<div class="mavis-action-row">' +
         button('Catálogo', 'sync', { connectionId: connection.id, syncAction: 'sync-catalog', secondary: true }) +
         button('Pedidos', 'sync', { connectionId: connection.id, syncAction: 'sync-orders-batch', secondary: true }) +
         button('Financeiro', 'sync', { connectionId: connection.id, syncAction: 'sync-financial', secondary: true }) +
         button('Ads', 'sync', { connectionId: connection.id, syncAction: 'sync-product-ads', secondary: true }) +
         button('Desconectar', 'disconnect', { connectionId: connection.id, secondary: true }) +
-        '</div></div>';
-    }).join('');
-    return '<div class="mavis-oauth-controls"><div class="mavis-action-row">' + connect + '</div>' +
-      '<small>' + escapeHtml(hint) + '</small>' + activeControls + '</div>';
+        '</div>';
+    } else if (manager() && pending) {
+      actions = '<div class="mavis-action-row">' +
+        button('Reautorizar pela Shopee', 'connect', { disabled: !state.oauth.configured }) +
+        '</div>';
+    }
+    return '<section class="mavis-store-row is-' + escapeHtml(connection.status) + '">' +
+      '<div class="mavis-store-icon">S</div><div class="mavis-store-body"><div class="mavis-store-title">' +
+      '<div><strong>' + escapeHtml(name) + '</strong><span>ID Shopee ' + escapeHtml(connection.external_shop_id) + '</span></div>' +
+      '<span class="mavis-status is-' + escapeHtml(active ? 'active' : pending ? 'warning' : connection.status) + '">' +
+      escapeHtml(statusLabel(connection.status)) + '</span></div>' +
+      '<p>' + escapeHtml(description) + '</p><div class="mavis-store-meta"><span>' +
+      escapeHtml(String(records)) + ' registros nos módulos</span><span>Última atualização: ' +
+      escapeHtml(dateLabel(connection.last_sync_at || (shop && shop.last_sync_at))) + '</span></div>' +
+      actions + '</div></section>';
+  }
+  function controlsMarkup(integration) {
+    if (!manager()) return '<p class="mavis-readonly-note">Seu perfil possui acesso somente leitura.</p>';
+    var connections = state.oauth.connections || [];
+    var needsAuth = connections.some(function (connection) { return connection.status === 'legacy_pending_reauth'; });
+    var sandbox = state.oauth.environment === 'sandbox';
+    var connectLabel = sandbox ? 'Adicionar loja de teste' :
+      (needsAuth ? 'Adicionar ou reautorizar loja' : 'Adicionar outra loja Shopee');
+    var hint = state.oauth.configured ? (sandbox ?
+      'Ambiente Sandbox: use somente uma conta de teste da Shopee; lojas e dados reais não são aceitos.' :
+      'A autorização acontece diretamente na Shopee. O Mavix Hub não recebe sua senha.') :
+      'A conexão está em liberação controlada. Nenhuma credencial foi exposta.';
+    return '<div class="mavis-oauth-controls"><div class="mavis-action-row">' +
+      button(connectLabel, 'connect', { disabled: !state.oauth.configured }) + '</div>' +
+      '<small>' + escapeHtml(hint) + '</small></div>';
   }
   function shopeeMarkup(integration) {
     var sandbox = state.oauth.environment === 'sandbox';
-    var shops = (integration.shops || []).map(function (shop) {
-      var connection = connectionForShop(shop);
-      var status = connection ? connection.status : shop.status;
-      return '<span class="mavis-shop-pill">' + escapeHtml(shop.name || 'Loja conectada') + ' · ' +
-        escapeHtml(statusLabel(status)) + '</span>';
-    }).join('');
+    var connections = state.oauth.connections || [];
+    var activeCount = connections.filter(function (connection) { return connection.status === 'active'; }).length;
+    var pendingCount = connections.filter(function (connection) { return connection.status === 'legacy_pending_reauth'; }).length;
+    var summary = activeCount + ' ativa' + (activeCount === 1 ? '' : 's');
+    if (pendingCount) summary += ' · ' + pendingCount + ' aguardando reautorização';
     return '<article class="mavis-integration-card mavis-shopee-card"><header><div><span class="mavis-provider">Shopee Open Platform' + (sandbox ? ' · Sandbox' : '') + '</span>' +
       '<h3>' + (sandbox ? 'Validação oficial via OAuth' : 'Conexão oficial via OAuth') + '</h3></div><span class="mavis-status is-' + escapeHtml(integration.status) + '">' +
       escapeHtml(statusLabel(integration.status)) + '</span></header>' +
-      '<p>Última atualização: <strong>' + escapeHtml(dateLabel(integration.last_sync_at)) + '</strong></p>' +
-      (shops ? '<div class="mavis-shop-list">' + shops + '</div>' : '<p class="mavis-muted">Nenhuma loja autorizada ainda.</p>') +
-      '<ul class="mavis-module-list">' + (integration.modules || []).map(moduleMarkup).join('') + '</ul>' +
+      '<p class="mavis-channel-summary">' + escapeHtml(summary) + '</p>' +
+      (connections.length ? '<div class="mavis-store-list">' + connections.map(function (connection) {
+        return connectionMarkup(connection, integration);
+      }).join('') + '</div>' : '<p class="mavis-muted">Nenhuma loja autorizada ainda.</p>') +
       controlsMarkup(integration) + '</article>';
+  }
+  function catalogMarkup() {
+    if (!state.catalogOpen) return '';
+    return '<section class="mavis-channel-picker"><div class="mavis-channel-picker-title"><div><span class="mavis-provider">Novo canal</span>' +
+      '<h3>Escolha o marketplace ou fonte de dados</h3></div>' +
+      button('Fechar', 'toggle-catalog', { secondary: true }) + '</div><div class="mavis-channel-options">' +
+      '<article><div class="mavis-channel-logo is-shopee">S</div><div><strong>Shopee</strong><span>OAuth oficial · disponível</span></div>' +
+      button('Conectar loja', 'connect', { disabled: !state.oauth.configured }) + '</article>' +
+      '<article><div class="mavis-channel-logo is-upseller">U</div><div><strong>UPSeller</strong><span>Importação XLSX/CSV · disponível</span></div>' +
+      button('Importar dados', 'open-importer', { secondary: true }) + '</article>' +
+      '<article class="is-coming"><div class="mavis-channel-logo">M</div><div><strong>Mercado Livre</strong><span>Em preparação</span></div></article>' +
+      '<article class="is-coming"><div class="mavis-channel-logo">A</div><div><strong>Amazon</strong><span>Em preparação</span></div></article>' +
+      '</div></section>';
   }
   function genericMarkup(integration) {
     return '<article class="mavis-integration-card"><header><div><span class="mavis-provider">' +
@@ -140,7 +212,7 @@
     var alert = '';
     if (state.error) alert = '<div class="mavis-integration-alert is-error">' + escapeHtml(state.error) + '</div>';
     else if (state.notice) alert = '<div class="mavis-integration-alert is-success">' + escapeHtml(state.notice) + '</div>';
-    target.innerHTML = alert + (state.integrations.length ? state.integrations.map(function (integration) {
+    target.innerHTML = alert + catalogMarkup() + (state.integrations.length ? state.integrations.map(function (integration) {
       return integration.provider === 'shopee' ? shopeeMarkup(integration) : genericMarkup(integration);
     }).join('') : '<div class="mavis-integration-empty">Nenhuma integração disponível para esta empresa.</div>');
   }
@@ -162,6 +234,7 @@
       state.integrations = Array.isArray(data.integrations) ? data.integrations : [];
       var oauth = await invoke(FUNCTIONS.oauth, { action: 'bootstrap' });
       state.oauth = { configured: Boolean(oauth.configured), environment: String(oauth.environment || ''), connections: Array.isArray(oauth.connections) ? oauth.connections : [] };
+      publishConnections();
     } catch (error) { state.error = error.message; }
     finally { state.loading = false; render(); }
   }
@@ -196,6 +269,15 @@
     var button = event.target.closest('[data-mavis-action]');
     if (!button || state.busy) return;
     var action = button.getAttribute('data-mavis-action');
+    if (action === 'toggle-catalog') {
+      state.catalogOpen = !state.catalogOpen;
+      render();
+      return;
+    }
+    if (action === 'open-importer') {
+      if (typeof window.switchView === 'function') window.switchView('importer');
+      return;
+    }
     state.busy = action; state.error = ''; state.notice = ''; render();
     try {
       if (action === 'connect') return await connectShopee();
@@ -212,9 +294,10 @@
     var view = byId('shopee-sync-view');
     if (!view || view.dataset.mavisIntegrationsInstalled === 'true') return;
     view.dataset.mavisIntegrationsInstalled = 'true';
-    view.innerHTML = '<section class="mavis-integrations"><div class="mavis-integrations-heading"><div><h2>Integrações</h2>' +
-      '<p>Conecte seus canais e acompanhe a atualização dos dados usados pelo Mavix Hub.</p></div>' +
-      '<span id="mavis-integrations-account"></span></div><div id="mavis-integrations-content"></div></section>';
+    view.innerHTML = '<section class="mavis-integrations"><div class="mavis-integrations-heading"><div><h2>Marketplaces e lojas</h2>' +
+      '<p>Conecte canais, escolha cada loja e acompanhe de onde vêm os dados do Mavix Hub.</p></div><div class="mavis-integrations-heading-actions">' +
+      '<span id="mavis-integrations-account"></span>' + button('Adicionar canal', 'toggle-catalog', { secondary: true }) +
+      '</div></div><div id="mavis-integrations-content"></div></section>';
     view.addEventListener('click', onClick);
     readCallback();
     window.addEventListener('mavis:auth-restored', refresh);
