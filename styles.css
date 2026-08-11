@@ -1150,3 +1150,16 @@ table.data-table tr:hover td {
   font-weight: 600;
 }
 
+/* Destructive action in the Marketplace integrations screen. */
+.mavis-action-danger {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.55);
+}
+
+.mavis-action-danger:hover:not(:disabled) {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+

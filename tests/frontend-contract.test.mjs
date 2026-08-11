@@ -6,7 +6,10 @@ const privacy = await readFile(new URL('../privacidade.html', import.meta.url), 
 const app = await readFile(new URL('../app.js', import.meta.url), 'utf8');
 const auth = await readFile(new URL('../supabase-auth-sync-v2.js', import.meta.url), 'utf8');
 const integrations = await readFile(new URL('../shopee-third-party-app.js', import.meta.url), 'utf8');
+const styles = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const integrationsFunction = await readFile(new URL('../supabase/functions/mavis-integrations-v1/index.ts', import.meta.url), 'utf8');
+const syncFunction = await readFile(new URL('../supabase/functions/shopee-sync-v3/index.ts', import.meta.url), 'utf8');
+const adsImport = await readFile(new URL('../shopee-ads-import.js', import.meta.url), 'utf8');
 
 assert.ok(index.indexOf('runtime-config.js') < index.indexOf('@supabase/supabase-js'));
 assert.match(index, /Logo-Mavix-Hub\.png/);
@@ -28,6 +31,10 @@ assert.match(integrations, /Conexão oficial via OAuth/);
 assert.match(integrations, /Adicionar canal/);
 assert.match(integrations, /Dados históricos preservados/);
 assert.match(integrations, /mavis:shop-connections-updated/);
+assert.match(integrations, /Pronta para a primeira sincroniza/);
+assert.match(integrations, /mavis-action-danger/);
+assert.match(integrations, /SYNC_LABELS/);
+assert.match(styles, /\.mavis-action-danger/);
 assert.match(app, /marketplace-scope-banner/);
 assert.match(app, /legacy_pending_reauth/);
 assert.match(integrations, /\['owner', 'admin'\]/);
@@ -36,5 +43,10 @@ assert.doesNotMatch(integrations, /Partner Key|Access Token Manual|Refresh Token
 assert.match(integrationsFunction, /ecommerce-control-jv\.netlify\.app/);
 assert.match(integrationsFunction, /connect: canManage, sync: canManage, disconnect: canManage/);
 assert.match(integrationsFunction, /latest\("upseller_stock_imports", "imported_at"/);
+assert.match(syncFunction, /\/api\/v2\/shop\/get_shop_info/);
+assert.match(syncFunction, /refreshShopName\(shop, accessToken, credential\)/);
+assert.match(integrations, /Importar relatório Ads/);
+assert.doesNotMatch(integrations, /syncAction: 'sync-product-ads'/);
+assert.match(adsImport, /mavis:shop-connections-updated/);
 
 console.log('Frontend contract checks passed.');

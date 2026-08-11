@@ -217,7 +217,7 @@
       + '<button class="btn-primary" data-jv-sync-action="status" style="width:auto;padding:9px 14px;">Testar Conexão</button>'
       + '<button class="btn-primary" data-jv-sync-action="refresh-token" style="width:auto;padding:9px 14px;">Renovar Token</button>'
       + '<button class="btn-primary" data-jv-sync-action="sync-catalog" style="width:auto;padding:9px 14px;">Sincronizar Catálogo</button>'
-      + '<button class="btn-primary" data-jv-sync-action="sync-product-ads" style="width:auto;padding:9px 14px;">Sincronizar Ads por Produto</button>'
+      + '<button class="btn-primary" data-jv-sync-action="open-ads-import" style="width:auto;padding:9px 14px;">Importar relatório de Ads</button>'
       + '</div>';
 
     if (health) health.insertAdjacentElement('beforebegin', panel);
@@ -230,7 +230,16 @@
     panel.addEventListener('click', function (event) {
       var button = event.target.closest('[data-jv-sync-action]');
       if (!button) return;
-      window.triggerShopeeSync(button.getAttribute('data-jv-sync-action'), button);
+      var action = button.getAttribute('data-jv-sync-action');
+      if (action === 'open-ads-import') {
+        if (typeof window.switchView === 'function') window.switchView('anuncios');
+        window.setTimeout(function () {
+          var panel = document.getElementById('jv-ads-import-panel');
+          if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
+        return;
+      }
+      window.triggerShopeeSync(action, button);
     });
   }
 
@@ -386,7 +395,7 @@
       { id: 'products', name: 'Produtos do Catálogo', action: 'sync-products', supported: true },
       { id: 'variations', name: 'Variações do Catálogo', action: 'sync-variations', supported: true },
       { id: 'catalog', name: 'Catálogo Completo', action: 'sync-catalog', supported: true },
-      { id: 'ads_product', name: 'Ads por Produto', action: 'sync-product-ads', supported: true },
+      { id: 'ads_product', name: 'Ads por Produto', action: 'open-ads-import', supported: false, reason: 'Importe o relatório manualmente na aba Anúncios.' },
       { id: 'orders', name: 'Pedidos e Financeiro', action: 'sync-financial', supported: false, reason: 'Aguarda migração de chaves por loja' },
       { id: 'ads_daily', name: 'Ads Diário Agregado', action: 'sync-ads-daily-step', supported: false, reason: 'Aguarda chave composta por loja' }
     ];

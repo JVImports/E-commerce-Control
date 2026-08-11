@@ -21,3 +21,6 @@ verify_jwt = true
 
 [functions.shopee-sync-v3]
 verify_jwt = true
+
+[functions.shopee-sync-scheduler-v1]
+verify_jwt = true

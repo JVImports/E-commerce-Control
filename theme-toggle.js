@@ -7,8 +7,8 @@
   var LAYOUT_FIX_VERSION = '20260710-release-hardening';
   var SHOPEE_MULTI_APP_VERSION = '20260710-release-hardening';
   var AUTH_SYNC_V2_VERSION = '20260710-release-hardening';
-  var SHOPEE_THIRD_PARTY_VERSION = '20260727-marketplace-management';
-  var SHOPEE_ADS_IMPORT_VERSION = '20260710-ads-manual-v1';
+  var SHOPEE_THIRD_PARTY_VERSION = '20260811-multishop-ads-report';
+  var SHOPEE_ADS_IMPORT_VERSION = '20260811-ads-report-v2';
 
   function guardShopeeOAuthCallback() {
     try {

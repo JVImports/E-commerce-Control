@@ -64,7 +64,7 @@
       '</div>',
       '<div class="commerce-settings-actions">',
       '<button id="cfg-save-finance" class="btn-primary" type="button">Salvar na minha conta</button>',
-      '<button id="cfg-sync-product-ads" class="btn-secondary" type="button"><i data-lucide="megaphone"></i> Sincronizar Ads por produto</button>',
+      '<button id="cfg-sync-product-ads" class="btn-secondary" type="button"><i data-lucide="file-up"></i> Importar relatório de Ads</button>',
       '<span id="cfg-finance-status" class="commerce-settings-status"></span>',
       '</div>'
     ].join('');
@@ -75,7 +75,13 @@
     if (saveBtn) saveBtn.addEventListener('click', function () {
       saveFinanceSettingsToAccount().catch(function (error) { setFinanceStatus('Falha ao salvar: ' + error.message, true); });
     });
-    if (syncBtn) syncBtn.addEventListener('click', function () { syncProductAdsFromConfig(syncBtn); });
+    if (syncBtn) syncBtn.addEventListener('click', function () {
+      if (typeof window.switchView === 'function') window.switchView('anuncios');
+      window.setTimeout(function () {
+        var panel = document.getElementById('jv-ads-import-panel');
+        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 0);
+    });
 
     loadFinanceSettingsFromAccount(getSelectedShopIdOrNull()).then(fillFinanceSettingsForm).catch(function (error) {
       setFinanceStatus('Falha ao carregar configurações: ' + error.message, true);

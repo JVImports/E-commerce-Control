@@ -16,6 +16,11 @@
     notice: '',
     catalogOpen: false
   };
+  var SYNC_LABELS = {
+    'sync-catalog': 'Catálogo',
+    'sync-orders-batch': 'Pedidos',
+    'sync-financial': 'Financeiro'
+  };
 
   function byId(id) { return document.getElementById(id); }
   function escapeHtml(value) {
@@ -110,7 +115,9 @@
   }
   function button(label, action, options) {
     var disabled = state.busy || (options && options.disabled);
-    var attrs = ' type="button" class="' + ((options && options.secondary) ? 'mavis-action-secondary' : 'mavis-action-primary') +
+    var buttonClass = (options && options.secondary) ? 'mavis-action-secondary' : 'mavis-action-primary';
+    if (options && options.danger) buttonClass += ' mavis-action-danger';
+    var attrs = ' type="button" class="' + buttonClass +
       '" data-mavis-action="' + escapeHtml(action) + '"';
     if (options && options.connectionId) attrs += ' data-connection-id="' + escapeHtml(options.connectionId) + '"';
     if (options && options.syncAction) attrs += ' data-sync-action="' + escapeHtml(options.syncAction) + '"';
@@ -123,8 +130,9 @@
     var active = connection.status === 'active';
     var pending = connection.status === 'legacy_pending_reauth';
     var records = shopRecordCount(shop);
-    var description = active ?
-      'Conexão OAuth ativa. Os dados podem ser atualizados normalmente.' :
+    var description = active && !connection.last_sync_at ?
+      'Pronta para a primeira sincronização. Escolha um módulo abaixo para importar os dados desta loja.' :
+      active ? 'Conexão OAuth ativa. Catálogo, pedidos e financeiro atualizam automaticamente; Ads entra por relatório.' :
       pending ?
         'Dados históricos preservados. Reautorize esta loja para voltar a atualizar.' :
         'Esta conexão não está atualizando dados no momento.';
@@ -134,8 +142,8 @@
         button('Catálogo', 'sync', { connectionId: connection.id, syncAction: 'sync-catalog', secondary: true }) +
         button('Pedidos', 'sync', { connectionId: connection.id, syncAction: 'sync-orders-batch', secondary: true }) +
         button('Financeiro', 'sync', { connectionId: connection.id, syncAction: 'sync-financial', secondary: true }) +
-        button('Ads', 'sync', { connectionId: connection.id, syncAction: 'sync-product-ads', secondary: true }) +
-        button('Desconectar', 'disconnect', { connectionId: connection.id, secondary: true }) +
+        button('Importar relatório Ads', 'open-ads-import', { secondary: true }) +
+        button('Desconectar', 'disconnect', { connectionId: connection.id, secondary: true, danger: true }) +
         '</div>';
     } else if (manager() && pending) {
       actions = '<div class="mavis-action-row">' +
@@ -252,10 +260,18 @@
     var payload = { action: syncAction, account_id: state.account.id, connection_id: connectionId };
     if (syncAction === 'sync-orders-batch') payload.months = 3;
     if (syncAction === 'sync-financial') payload.months = 1;
-    if (syncAction === 'sync-product-ads') payload.days = 30;
     await invoke(FUNCTIONS.sync, payload);
-    state.notice = 'Sincronização concluída com sucesso.';
+    var connection = (state.oauth.connections || []).find(function (item) { return item.id === connectionId; });
+    var shopName = connection ? connectionName(connection, state.oauth.connections) : 'a loja selecionada';
+    state.notice = (SYNC_LABELS[syncAction] || 'Sincronização') + ' concluído para ' + shopName + '.';
     if (typeof window.loadAllData === 'function') window.setTimeout(function () { window.loadAllData(); }, 300);
+  }
+  function openAdsImport() {
+    if (typeof window.switchView === 'function') window.switchView('anuncios');
+    window.setTimeout(function () {
+      var panel = byId('jv-ads-import-panel');
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
   }
   async function disconnect(button) {
     if (!window.confirm('Desconectar esta loja da Shopee? As informações já importadas serão preservadas.')) return;
@@ -276,6 +292,10 @@
     }
     if (action === 'open-importer') {
       if (typeof window.switchView === 'function') window.switchView('importer');
+      return;
+    }
+    if (action === 'open-ads-import') {
+      openAdsImport();
       return;
     }
     state.busy = action; state.error = ''; state.notice = ''; render();

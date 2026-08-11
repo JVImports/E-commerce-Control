@@ -4,8 +4,9 @@ import test from "node:test";
 
 test("runtime configuration is generated and frozen", async () => {
   const source = await readFile("dist/runtime-config.js", "utf8");
+  const environment = process.env.CONTEXT === "production" ? "production" : "deploy-preview";
   assert.match(source, /^window\.MAVIS_RUNTIME_CONFIG = Object\.freeze\(/);
-  assert.match(source, /"environment":"deploy-preview"/);
+  assert.match(source, new RegExp(`"environment":"${environment}"`));
   assert.match(source, /"reviewPath":"\/\?review=shopee"/);
   assert.doesNotMatch(source, /service_role/i);
 });

@@ -20,6 +20,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 const SHOPEE_REQUEST_DELAY_MS = Number(Deno.env.get("SHOPEE_REQUEST_DELAY_MS") ?? "300");
+const SCHEDULER_SECRET = Deno.env.get("MAVIS_SHOPEE_SCHEDULER_SECRET") ?? "";
 const PARTNER_ORIGINS = new Set([SHOPEE_LIVE_PARTNER_ORIGIN, SHOPEE_SANDBOX_PARTNER_ORIGIN]);
 const ADS_ORIGINS = new Set([SHOPEE_LIVE_ADS_ORIGIN, SHOPEE_SANDBOX_PARTNER_ORIGIN]);
 
@@ -251,13 +252,18 @@ async function shopeeRequest<T>({ method, path, params, payload, accessToken, sh
   throw new Error(`Unexpected Shopee failure on ${path}`);
 }
 
-async function getUserFromRequest(req: Request) {
+type RequestActor = { userId: string | null; internal: boolean };
+
+async function getRequestActor(req: Request): Promise<RequestActor> {
+  if (SCHEDULER_SECRET && req.headers.get("x-mavis-scheduler-secret") === SCHEDULER_SECRET) {
+    return { userId: null, internal: true };
+  }
   const header = req.headers.get("Authorization") ?? "";
   const jwt = header.replace(/^Bearer\s+/i, "").trim();
   if (!jwt) throw new HttpError(401, "Missing Authorization bearer token");
   const { data, error } = await supabase.auth.getUser(jwt);
   if (error || !data.user) throw new HttpError(401, "Invalid or expired Supabase user token");
-  return data.user;
+  return { userId: data.user.id, internal: false };
 }
 
 function safeShop(shop: any) {
@@ -330,8 +336,8 @@ async function listShops(userId: string, requestedAccountId?: string) {
   }));
 }
 
-async function loadShop(userId: string, accountId: string, connectionId: string): Promise<ShopRow> {
-  await membership(userId, accountId);
+async function loadShop(userId: string | null, accountId: string, connectionId: string): Promise<ShopRow> {
+  if (userId) await membership(userId, accountId);
   const { data: connection, error } = await supabase
     .from("shopee_connections")
     .select("id,authorization_id,account_id,environment,external_shop_id,shop_name,status,authorized_by_user_id")
@@ -446,6 +452,31 @@ async function refreshAccessToken(shop: ShopRow, credential: ShopeeCredential): 
   return accessToken;
 }
 
+async function refreshShopName(shop: ShopRow, accessToken: string, credential: ShopeeCredential) {
+  try {
+    const data = await shopeeRequest<any>({
+      method: "GET",
+      path: "/api/v2/shop/get_shop_info",
+      accessToken,
+      shopId: String(shop.shop_id),
+      credential
+    });
+    const name = String(data.response?.shop_name ?? data.response?.shop?.shop_name ?? data.shop_name ?? "").trim();
+    if (!name || name === shop.shop_name) return shop.shop_name;
+    const { error } = await supabase
+      .from("shopee_connections")
+      .update({ shop_name: name, updated_at: nowIso() })
+      .eq("id", shop.connection_id)
+      .eq("account_id", shop.account_id);
+    if (error) throw error;
+    shop.shop_name = name;
+    return name;
+  } catch (error) {
+    console.warn(`Unable to refresh Shopee shop name for shop=${shop.shop_id}`, error instanceof Error ? error.message : String(error));
+    return shop.shop_name;
+  }
+}
+
 async function logSync(shop: ShopRow | null, module: string, status: string, message: string) {
   try {
     await supabase.from("sync_log").insert({
@@ -459,24 +490,30 @@ async function logSync(shop: ShopRow | null, module: string, status: string, mes
   } catch (_) {}
 }
 
-function stateKey(shop: ShopRow, key: string) {
-  return `${Number(shop.shop_id)}:${key}`;
-}
-
 async function getSyncState(shop: ShopRow, key: string) {
   const { data, error } = await supabase
-    .from("sync_state")
-    .select("value")
-    .eq("key", stateKey(shop, key))
+    .from("sync_cursors")
+    .select("cursor_value")
+    .eq("shop_id", Number(shop.shop_id))
+    .eq("module", "shopee-v3")
+    .eq("cursor_key", key)
     .maybeSingle();
   if (error) throw error;
-  return data?.value ? String(data.value) : null;
+  return data?.cursor_value ? String(data.cursor_value) : null;
 }
 
 async function setSyncState(shop: ShopRow, key: string, value: string | number) {
   const { error } = await supabase
-    .from("sync_state")
-    .upsert({ key: stateKey(shop, key), value: String(value), updated_at: nowIso(), user_id: shop.user_id, account_id: shop.account_id ?? null }, { onConflict: "key" });
+    .from("sync_cursors")
+    .upsert({
+      account_id: shop.account_id ?? null,
+      connection_id: shop.connection_id,
+      shop_id: Number(shop.shop_id),
+      module: "shopee-v3",
+      cursor_key: key,
+      cursor_value: String(value),
+      updated_at: nowIso()
+    }, { onConflict: "shop_id,module,cursor_key" });
   if (error) throw error;
 }
 
@@ -1031,7 +1068,7 @@ function buildPerformanceRows(shop: ShopRow, campaignMap: Map<number, Record<str
   return rows;
 }
 
-async function syncProductAds(shop: ShopRow, credential: ShopeeCredential, options: { days?: number; start_date?: string; end_date?: string }) {
+async function syncProductAdsWork(shop: ShopRow, credential: ShopeeCredential, options: { days?: number; start_date?: string; end_date?: string }) {
   await logSync(shop, "ads_product", "STARTED", `Product Ads sync started shop=${shop.shop_id} source=${credential.source}`);
   const accessToken = await refreshAccessToken(shop, credential);
   const campaignIds = await getCampaignIds(shop, accessToken, credential);
@@ -1068,7 +1105,17 @@ async function syncProductAds(shop: ShopRow, credential: ShopeeCredential, optio
   return { campaigns: campaignIds.length, campaignRows: settings.upserted, dailyRows, ranges: rangesProcessed, credentialSource: credential.source };
 }
 
-async function handleAction(userId: string, body: Record<string, any>, req: Request) {
+async function syncProductAds(shop: ShopRow, credential: ShopeeCredential, options: { days?: number; start_date?: string; end_date?: string }) {
+  try {
+    return await syncProductAdsWork(shop, credential, options);
+  } catch (error) {
+    const message = String(error instanceof Error ? error.message : error).replace(/[\r\n]+/g, " ").slice(0, 500);
+    await logSync(shop, "ads_product", "ERROR", `Product Ads sync failed shop=${shop.shop_id}: ${message}`);
+    throw error;
+  }
+}
+
+async function handleAction(actor: RequestActor, body: Record<string, any>, req: Request) {
   const url = new URL(req.url);
   const action = String(body.action ?? url.searchParams.get("action") ?? "status");
   const accountId = String(body.account_id ?? url.searchParams.get("account_id") ?? "");
@@ -1079,7 +1126,8 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
   }
 
   if (action === "status") {
-    const shops = await listShops(userId, accountId || undefined);
+    if (actor.internal || !actor.userId) throw new HttpError(403, "Status não disponível ao scheduler interno.");
+    const shops = await listShops(actor.userId, accountId || undefined);
     const connection = connectionId
       ? shops.find((shop) => shop.connection_id === connectionId)
       : null;
@@ -1104,9 +1152,14 @@ async function handleAction(userId: string, body: Record<string, any>, req: Requ
     }
     throw new HttpError(400, `Ação não suportada: ${action}`);
   }
-  const shop = await loadShop(userId, accountId, connectionId);
-  await assertSyncPermission(userId, shop.account_id);
+  if (actor.internal && !["sync-catalog", "sync-orders-step", "sync-orders-batch", "sync-financial", "sync-product-ads"].includes(action)) {
+    throw new HttpError(403, "Ação não permitida ao scheduler interno.");
+  }
+  const shop = await loadShop(actor.userId, accountId, connectionId);
+  if (!actor.internal && actor.userId) await assertSyncPermission(actor.userId, shop.account_id);
   const credential = await loadCredential(shop);
+  const accessToken = await refreshAccessToken(shop, credential);
+  await refreshShopName(shop, accessToken, credential);
   let result: unknown;
 
   if (action === "refresh-token") {
@@ -1168,9 +1221,9 @@ Deno.serve(async (req) => {
   let body: Record<string, any> = {};
   try {
     if (req.method !== "GET" && req.method !== "POST") throw new HttpError(405, "Method not allowed");
-    const user = await getUserFromRequest(req);
+    const actor = await getRequestActor(req);
     if (req.method === "POST") body = await req.json().catch(() => ({}));
-    return jsonResponse(req, await handleAction(user.id, body, req));
+    return jsonResponse(req, await handleAction(actor, body, req));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = error instanceof HttpError ? error.status : 500;

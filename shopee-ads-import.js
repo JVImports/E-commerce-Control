@@ -219,12 +219,12 @@
       if (file) readFile(file).catch(function (error) { setStatus(error.message, 'error'); });
     });
     byId('jv-ads-import-submit').addEventListener('click', submit);
-    window.addEventListener('jv:shopee-connections', function (event) {
+    window.addEventListener('mavis:shop-connections-updated', function (event) {
       state.connections = event.detail && event.detail.connections ? event.detail.connections : [];
       renderConnections();
     });
     if (window.jvShopeeThirdParty) {
-      state.connections = window.jvShopeeThirdParty.state.connections || [];
+      state.connections = (window.jvShopeeThirdParty.state.oauth || {}).connections || [];
       renderConnections();
     }
   }
