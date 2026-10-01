@@ -1,0 +1,27 @@
+:root.sidebar-collapsed { --sidebar-width: 68px; }
+aside.sidebar { overflow-y: auto; }
+.sidebar .logo-container { justify-content: space-between; padding: 8px 0 20px; gap: 12px; }
+.sidebar .mavis-logo-sidebar { min-width: 0; width: 150px; }
+.sidebar-mark { display: none; object-fit: contain; border-radius: 8px; }
+.sidebar-toggle { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid hsl(var(--border-color)); border-radius: 8px; background: hsl(var(--bg-card)); color: hsl(var(--text-secondary)); cursor: pointer; }
+.sidebar-toggle:hover { color: hsl(var(--color-primary)); border-color: hsl(var(--color-primary)); }
+.sidebar-toggle:focus-visible, .sidebar .nav-item:focus-visible { outline: 2px solid hsl(var(--color-primary)); outline-offset: 3px; }
+.sidebar .nav-item { flex-shrink: 0; }
+.sidebar button.nav-item { width: 100%; border: 0; background: transparent; font: inherit; font-size: .95rem; font-weight: 500; text-align: left; }
+.sidebar button.nav-item:hover { background: hsl(var(--bg-card)); color: hsl(var(--text-primary)); }
+.sidebar .nav-item svg { flex: none; width: 22px; height: 22px; }
+.sidebar-collapsed aside.sidebar { padding: 24px 6px; }
+.sidebar-collapsed .sidebar .logo-container { flex-direction: column; justify-content: center; gap: 16px; }
+.sidebar-collapsed .sidebar .mavis-logo-sidebar, .sidebar-collapsed .sidebar .nav-item span { display: none; }
+.sidebar-collapsed .sidebar-mark { display: block; }
+.sidebar-collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+.sidebar-collapsed .sidebar .nav-item { justify-content: center; padding: 12px 0; gap: 0; }
+
+@media (max-width: 768px) {
+  html:not(.sidebar-collapsed) aside.sidebar { width: min(260px, 100vw); padding: 24px 16px; box-shadow: 8px 0 32px #0003; }
+  html:not(.sidebar-collapsed) .sidebar .nav-item span { display: inline; }
+  html:not(.sidebar-collapsed) .sidebar .nav-item { justify-content: flex-start; padding: 12px 14px; gap: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  aside.sidebar, main.main-content, .sidebar .nav-item { transition: none; }
+}

@@ -10,6 +10,8 @@ export const publicFiles = [
   "orders.js",
   "order-commission.js",
   "orders.css",
+  "sidebar.css",
+  "sidebar.js",
   "hotfix.js",
   "ads-analyzer.css",
   "ads-analyzer.js",
