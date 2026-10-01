@@ -13,6 +13,7 @@
     loading: false,
     busy: '',
     error: '',
+    callbackError: '',
     notice: '',
     catalogOpen: false,
     editingConnectionId: null
@@ -235,7 +236,7 @@
     if (account) account.textContent = state.account ? state.account.name + ' · acesso ' + String(state.account.role || '').toLowerCase() : '';
     if (state.loading) return void (target.innerHTML = '<div class="mavis-integration-empty">Carregando conexões…</div>');
     var alert = '';
-    if (state.error) alert = '<div class="mavis-integration-alert is-error">' + escapeHtml(state.error) + '</div>';
+    if (state.error || state.callbackError) alert = '<div class="mavis-integration-alert is-error">' + escapeHtml(state.error || state.callbackError) + '</div>';
     else if (state.notice) alert = '<div class="mavis-integration-alert is-success">' + escapeHtml(state.notice) + '</div>';
     target.innerHTML = alert + catalogMarkup() + (state.integrations.length ? state.integrations.map(function (integration) {
       return integration.provider === 'shopee' ? shopeeMarkup(integration) : genericMarkup(integration);
@@ -246,7 +247,12 @@
     var result = params.get('shopee_connection');
     if (!result) return;
     state.notice = result === 'success' ? 'Loja Shopee autorizada com sucesso.' : '';
-    state.error = result === 'error' ? 'A Shopee não concluiu a autorização. Tente novamente.' : '';
+    var callbackMessages = {
+      authorization_save_failed: 'Não foi possível salvar a autorização no Mavix Hub. A loja continua sem atualizar. Reautorize pela Shopee para tentar novamente.',
+      shop_already_connected: 'Esta loja Shopee já está conectada a outra empresa.',
+      state_invalid: 'Esta tentativa de autorização expirou ou já foi utilizada. Inicie uma nova autorização.'
+    };
+    state.callbackError = result === 'error' ? (callbackMessages[params.get('shopee_code')] || 'Não foi possível concluir a autorização da loja. Tente novamente pela Shopee.') : '';
     params.delete('shopee_connection'); params.delete('shopee_code'); params.delete('shop_id');
     var query = params.toString();
     window.history.replaceState({}, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash);
@@ -265,6 +271,7 @@
   }
   async function connectShopee() {
     if (!state.account) throw new Error('Selecione uma empresa antes de conectar a Shopee.');
+    state.callbackError = '';
     var result = await invoke(FUNCTIONS.oauth, {
       action: 'start', account_id: state.account.id, return_path: '/?review=shopee'
     });

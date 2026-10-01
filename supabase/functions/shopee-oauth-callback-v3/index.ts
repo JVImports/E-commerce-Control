@@ -93,6 +93,15 @@ function extractShopIds(token: any, callbackShopId: number) {
   return [...new Set(values.filter((value) => Number.isFinite(value) && value > 0))];
 }
 
+function callbackFailure(error: unknown) {
+  const details = error as { code?: unknown; message?: unknown } | null;
+  const message = error instanceof Error ? error.message : String(details?.message || "");
+  if (message.includes("SHOP_ALREADY_CONNECTED")) return { publicCode: "shop_already_connected", diagnosticCode: "shop_already_connected" };
+  const code = String(details?.code || "");
+  if (/^(?:[A-Z0-9]{5}|PGRST\d{3})$/.test(code)) return { publicCode: "authorization_save_failed", diagnosticCode: code };
+  return { publicCode: "callback_failed", diagnosticCode: "callback_failed" };
+}
+
 Deno.serve(async (req) => {
   let stateHash = "";
   let returnPath = "/";
@@ -143,20 +152,21 @@ Deno.serve(async (req) => {
 
     return redirect(returnPath, "success", "connected", shopIds[0]);
   } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
-    console.error("Shopee OAuth v3 callback failed", raw);
+    const failure = callbackFailure(error);
+    // Supabase RPC failures are structured objects; log only a safe code.
+    console.error("Shopee OAuth v3 callback failed", failure.diagnosticCode);
     if (claimed && stateHash) {
       try {
         await supabase.rpc("fail_shopee_oauth_state_v3", {
           p_state_hash: stateHash,
-          p_error_code: raw.includes("SHOP_ALREADY_CONNECTED") ? "shop_already_connected" : "callback_failed"
+          p_error_code: failure.publicCode
         });
       } catch (_) {}
     }
     return redirect(
       returnPath,
       "error",
-      raw.includes("SHOP_ALREADY_CONNECTED") ? "shop_already_connected" : "callback_failed"
+      failure.publicCode
     );
   }
 });

@@ -28,8 +28,8 @@ Para duas lojas sem fila acumulada, são até 124 sincronizações/dia e 288 cha
 ## Publicação
 
 1. Aplicar `20261001144933_economical_incremental_shopee_sync.sql`; ela pausa as rotinas durante a transição.
-2. Publicar `shopee-sync-v3`, `shopee-sync-scheduler-v1` e `shopee-oauth-v3`, incluindo os arquivos `_shared` necessários e `verify_jwt=true`.
-3. Validar atomicidade da RPC `upsert_shopee_order_page`, seus privilégios exclusivos para `service_role` e a preservação do nome nos dois overloads de `finalize_shopee_oauth_v3`.
+2. Publicar `shopee-sync-v3`, `shopee-sync-scheduler-v1` e `shopee-oauth-v3`, incluindo os arquivos `_shared` necessários e `verify_jwt=true`. O callback `shopee-oauth-callback-v3` permanece sem validação JWT, autenticado pelo state temporário de uso único.
+3. Aplicar `20261001154233_qualify_shopee_oauth_reauthorization_cleanup.sql` e validar a qualificação das duas referências à coluna de tokens nos dois overloads de `finalize_shopee_oauth_v3`. Validar atomicidade da RPC `upsert_shopee_order_page`, seus privilégios exclusivos para `service_role` e a preservação do nome no OAuth.
 4. Aplicar `20261001151953_activate_economical_shopee_scheduler.sql`. Conexões que precisam de reautorização continuam pausadas. A migração altera o job existente; não criar um segundo agendador.
 5. Publicar o frontend pelo GitHub/Netlify. Validar Integrações e Pedidos com usuário autenticado.
 
@@ -40,3 +40,5 @@ O GitHub/Netlify publica o frontend; o deploy das funções e das migrações do
 Consultar `sync_runs` (resultado por execução), `shopee_sync_schedules` (fila/pausas), `sync_cursors` (progresso por loja) e os campos públicos de `shopee_connections`. Não consultar nem copiar tokens, chaves de serviço, segredos do cron ou conteúdo do Vault em diagnósticos.
 
 Em 01/10/2026, testes reais das duas lojas Live retornaram autorização expirada. Os dados históricos foram preservados e a atualização depende de reautorizar cada loja na Shopee. A liberação JWT permanece ativa nas três funções. Testes locais: `node --test --test-isolation=none tests/*.test.mjs`. Tipos: `deno check` nos três entrypoints. O teste SQL de atomicidade usa transação com rollback e não deixa pedidos fictícios no banco.
+
+As primeiras tentativas de reautorização posteriores falharam com SQLSTATE `42702`: o parâmetro de saída `authorization_id` conflitava com duas colunas não qualificadas na limpeza da autorização substituída. A migração de correção qualifica essas colunas, preservando assinaturas e privilégios. O callback passa a registrar apenas códigos seguros de falha; erros estruturados de RPC retornam `authorization_save_failed`. O frontend mantém esse aviso durante o carregamento das integrações. Testes de callback e persistência do aviso elevaram a suíte a 35 testes. Após corrigir essa falha, iniciar uma nova autorização; os estados anteriores estão concluídos com erro e não devem ser reutilizados.
