@@ -18,4 +18,9 @@ test("review entry point loads runtime config before Supabase", async () => {
   assert.ok(runtime >= 0, "runtime-config.js is referenced");
   assert.ok(supabase >= 0, "Supabase SDK is referenced");
   assert.ok(runtime < supabase, "runtime config precedes Supabase SDK");
+  const commission = html.indexOf('src="order-commission.js');
+  const orders = html.indexOf('src="orders.js');
+  assert.ok(commission >= 0 && orders > commission, "commission calculator precedes orders UI");
+  const calculator = await readFile("dist/order-commission.js", "utf8");
+  assert.match(calculator, /window\.mavisOrderCommission = Object\.freeze/);
 });

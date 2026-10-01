@@ -8,6 +8,7 @@ export const publicFiles = [
   "theme-toggle.js",
   "app.js",
   "orders.js",
+  "order-commission.js",
   "orders.css",
   "hotfix.js",
   "ads-analyzer.css",

@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../orders.js', import.meta.url), 'utf8');
+const commissionSource = await readFile(new URL('../order-commission.js', import.meta.url), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const flush = async () => { for (let i = 0; i < 6; i++) await tick(); };
 function harness({ respond, timeout = 15000, session = true } = {}) {
@@ -45,6 +46,7 @@ function harness({ respond, timeout = 15000, session = true } = {}) {
       }
     }
   };
+  vm.runInNewContext(commissionSource, { window });
   vm.runInNewContext(source, { window, document: { getElementById: id => nodes.get(id) }, Intl, Date, Map, Promise, AbortController, setTimeout: (fn, ms) => setTimeout(fn, ms === 15000 ? timeout : ms), clearTimeout });
   const clickDetail = index => nodes.get('pedidos-view').fire('click', { target: { closest: selector => selector === '[data-order-index]' ? { dataset: { orderIndex: String(index) } } : null } });
   return { window, nodes, calls, events, clickDetail };
@@ -157,4 +159,42 @@ test('current connection names replace legacy shop labels without changing the a
   await flush();
   assert.match(h.nodes.get('orders-rows').innerHTML, /Nome atualizado &lt;Loja B&gt;/);
   assert.deepEqual(Array.from(op(h.calls.at(-1), 'in')[0][2]), ['1', '2']);
+});
+
+test('receipt estimates use item prices and quantities in the same bounded request, excluding unavailable and cancelled orders from the page total', async () => {
+  const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: [
+    { ...order('TWO-UNITS'), total_amount: 999, shopee_order_items: [{ shop_id: 1, quantity: 2, unit_price: 79.99 }] },
+    { ...order('CANCELLED'), status: 'CANCELLED', shopee_order_items: [{ shop_id: 1, quantity: 1, unit_price: 80 }] },
+    { ...order('MISSING'), shopee_order_items: [] }
+  ] } : undefined });
+  await h.window.mavisOrders.open();
+  const query = h.calls.find(call => call.table === 'shopee_orders');
+  assert.match(op(query, 'select')[0][1], /shopee_order_items\(shop_id,quantity,unit_price\)/);
+  assert.deepEqual(JSON.parse(JSON.stringify(op(query, 'limit'))), [['limit', 201, { referencedTable: 'shopee_order_items' }]]);
+  assert.equal(h.calls.length, 2, 'no additional per-order requests');
+  assert.match(h.nodes.get('orders-rows').innerHTML.replace(/\s/g, ''), /R\$118,98/);
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Pedido cancelado|Itens não disponíveis/);
+  assert.match(h.nodes.get('orders-summary-receipt').textContent.replace(/\s/g, ''), /R\$118,98/);
+  assert.match(h.nodes.get('orders-summary-receipt').textContent, /1 de 3 pedidos/);
+});
+
+test('details explain the commission per unit and reconcile with the estimated receipt', async () => {
+  const h = harness({ respond: call => {
+    if (call.table === 'shopee_orders') return op(call, 'maybeSingle').length ? { data: order('DETAIL') } : { data: [{ ...order('DETAIL'), shopee_order_items: [{ shop_id: 1, quantity: 2, unit_price: 39.99 }] }] };
+    if (call.table === 'shopee_order_items') return { data: [{ id: 1, shop_id: 1, item_name: 'Produto', quantity: 2, unit_price: 39.99 }] };
+  } });
+  await h.window.mavisOrders.open(); h.clickDetail(0); await flush();
+  const detail = h.nodes.get('orders-detail-body').innerHTML.replace(/\s/g, '');
+  assert.match(detail, /Valordositens<\/dt><dd>R\$79,98/);
+  assert.match(detail, /Comissãoestimada<\/dt><dd>R\$25,00/);
+  assert.match(detail, /Recebimentoestimado<\/dt><dd>R\$54,98/);
+  assert.match(detail, /20%\+R\$4,50\/unidade/);
+});
+
+test('a truncated item list never displays a partial receipt as the full estimate', async () => {
+  const lines = Array.from({ length: 201 }, () => ({ shop_id: 1, quantity: 1, unit_price: 80 }));
+  const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: [{ ...order('LONG'), shopee_order_items: lines }] } : undefined });
+  await h.window.mavisOrders.open();
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Itens incompletos/);
+  assert.match(h.nodes.get('orders-summary-receipt').textContent, /não disponível/);
 });

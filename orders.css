@@ -32,6 +32,14 @@
 .orders-date, .orders-money { white-space: nowrap; }
 .orders-table .orders-money { text-align: right; }
 .orders-table small { display: block; color: hsl(var(--text-secondary)); margin-top: 5px; }
+.orders-receipt strong { color: hsl(var(--color-primary)); font-weight: 600; }
+.orders-estimate-unavailable { color: hsl(var(--text-secondary)); }
+.orders-table .orders-estimate-unavailable small { max-width: 180px; white-space: normal; }
+.orders-estimate-note { color: hsl(var(--text-secondary)); font-size: .78rem; line-height: 1.6; margin-top: 16px; }
+.orders-receipt-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.orders-receipt-summary > div { background: hsl(var(--bg-surface)); border: 1px solid hsl(var(--border-color)); border-radius: 8px; padding: 12px; }
+.orders-receipt-summary dt { color: hsl(var(--text-secondary)); font-size: .75rem; margin-bottom: 8px; }
+.orders-receipt-summary dd { margin: 0; font-size: 1rem; font-weight: 600; }
 .orders-badge { display: inline-block; font-size: .74rem; font-weight: 600; border-radius: 6px; padding: 5px 8px; white-space: nowrap; }
 .orders-badge.success { background: hsl(var(--color-success-glow)); color: hsl(var(--color-success)); }
 .orders-badge.warning { background: hsl(var(--color-warning-glow)); color: hsl(var(--color-warning)); }
@@ -60,4 +68,5 @@
   .orders-pagination > div { width: 100%; }
   .orders-pagination .orders-button { flex: 1; }
   .orders-detail-meta { grid-template-columns: 1fr; }
+  .orders-receipt-summary { grid-template-columns: 1fr; }
 }

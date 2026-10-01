@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   const PAGE_SIZE = 25;
+  const ITEM_LIMIT = 200;
   const TIMEOUT_MS = 15000;
   const STATUS = {
     UNPAID: ['Aguardando pagamento', 'warning'],
@@ -19,6 +20,9 @@
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   const dateText = (value) => value && Number.isFinite(new Date(value).getTime()) ? dates.format(new Date(value)) : 'Não informado';
   const amountText = (value) => value !== null && value !== undefined && Number.isFinite(Number(value)) ? money.format(Number(value)) : 'Não informado';
+  const centsText = (value) => money.format(value / 100);
+  const estimate = (order, items = order.shopee_order_items, complete = Array.isArray(items) && items.length <= ITEM_LIMIT) => window.mavisOrderCommission.estimate(order, items, complete);
+  const receiptCell = (result) => result.kind === 'estimated' ? `<strong>${centsText(result.receiptCents)}</strong>` : `<span class="orders-estimate-unavailable">—<small>${escape(result.reason)}</small></span>`;
   const badge = (status) => `<span class="orders-badge ${STATUS[status]?.[1] || 'muted'}">${escape(STATUS[status]?.[0] || status || 'Não informado')}</span>`;
   let initialized = false;
   let visible = false;
@@ -68,8 +72,9 @@
         <div id="orders-freshness" class="orders-freshness"></div>
         <div id="orders-message" class="orders-message" role="status" aria-live="polite"></div>
         <div id="orders-results" hidden>
-          <div class="orders-summary"><span id="orders-summary-count"></span><span id="orders-summary-amount"></span><span id="orders-period-label">Todo o histórico · Horário de Brasília</span></div>
-          <div class="orders-table-scroll" tabindex="0" role="region" aria-label="Tabela de pedidos"><table class="orders-table"><thead><tr><th scope="col">Pedido</th><th scope="col">Loja</th><th scope="col">Criado em</th><th scope="col">Status</th><th scope="col">Comprador</th><th scope="col" class="orders-money">Valor</th><th scope="col">Detalhes</th></tr></thead><tbody id="orders-rows"></tbody></table></div>
+          <div class="orders-summary"><span id="orders-summary-count"></span><span id="orders-summary-amount"></span><span id="orders-summary-receipt"></span><span id="orders-period-label">Todo o histórico · Horário de Brasília</span></div>
+          <div class="orders-table-scroll" tabindex="0" role="region" aria-label="Tabela de pedidos"><table class="orders-table"><thead><tr><th scope="col">Pedido</th><th scope="col">Loja</th><th scope="col">Criado em</th><th scope="col">Status</th><th scope="col">Comprador</th><th scope="col" class="orders-money">Valor do pedido</th><th scope="col" class="orders-money">Recebimento estimado</th><th scope="col">Detalhes</th></tr></thead><tbody id="orders-rows"></tbody></table></div>
+          <p class="orders-estimate-note">Estimativa pela tabela de comissão informada, calculada por unidade sobre o valor dos itens. Frete e outros ajustes do repasse não entram no cálculo. Confira a composição em “Ver pedido”.</p>
         </div>
         <div class="orders-pagination"><span id="orders-page" aria-live="polite"></span><div><button type="button" id="orders-prev" class="orders-button" disabled>Anterior</button><button type="button" id="orders-next" class="orders-button" disabled>Próxima</button></div></div>
       </section>
@@ -159,8 +164,9 @@
         const ids = selectedIds();
         if (!ids.length) return { data: [], noShops: true };
         let query = client.from('shopee_orders')
-          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at')
+          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at,shopee_order_items(shop_id,quantity,unit_price)')
           .in('shop_id', ids)
+          .limit(ITEM_LIMIT + 1, { referencedTable: 'shopee_order_items' })
           .order('created_at', { ascending: false, nullsFirst: false })
           .order('order_sn', { ascending: false })
           .order('shop_id', { ascending: false });
@@ -190,10 +196,12 @@
       el('orders-rows').innerHTML = rows.map((order, index) => `<tr>
         <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td>
         <td class="orders-date">${dateText(order.created_at)}</td><td>${badge(order.status)}</td><td>${escape(order.buyer_username || 'Não informado')}</td>
-        <td class="orders-money">${amountText(order.total_amount)}</td><td><button type="button" class="orders-button small" data-order-index="${index}" aria-label="Ver pedido ${escape(order.order_sn)}">Ver pedido</button></td></tr>`).join('');
+        <td class="orders-money">${amountText(order.total_amount)}</td><td class="orders-money orders-receipt">${receiptCell(estimate(order))}</td><td><button type="button" class="orders-button small" data-order-index="${index}" aria-label="Ver pedido ${escape(order.order_sn)}">Ver pedido</button></td></tr>`).join('');
       el('orders-summary-count').textContent = `${rows.length} pedidos nesta página`;
       const values = rows.filter((order) => order.total_amount != null && Number.isFinite(Number(order.total_amount)));
       el('orders-summary-amount').textContent = `Valor desta página: ${money.format(values.reduce((total, order) => total + Number(order.total_amount), 0))}${values.length !== rows.length ? ' (valores disponíveis)' : ''}`;
+      const receipts = rows.map(order => estimate(order)).filter(value => value.kind === 'estimated');
+      el('orders-summary-receipt').textContent = receipts.length ? `Recebimento estimado nesta página: ${centsText(receipts.reduce((total, value) => total + value.receiptCents, 0))} · ${receipts.length} de ${rows.length} pedidos` : 'Recebimento estimado: não disponível para estes pedidos';
       el('orders-period-label').textContent = `${filters.from || filters.to ? 'Período filtrado' : 'Todo o histórico'} · Horário de Brasília`;
       const latest = Math.max(...rows.map((order) => new Date(order.synced_at || '').getTime()).filter(Number.isFinite));
       const stale = !Number.isFinite(latest) || Date.now() - latest > 86400000;
@@ -219,17 +227,24 @@
       const [header, items] = await bounded(() => Promise.all([
         window.supabaseClient.from('shopee_orders').select('order_sn,shop_id,status,total_amount,payment_method,shipping_address,items_summary,created_at,updated_at,synced_at')
           .eq('shop_id', order.shop_id).eq('order_sn', order.order_sn).maybeSingle().abortSignal(current.signal),
-        window.supabaseClient.from('shopee_order_items').select('id,item_name,model_name,quantity,unit_price')
-          .eq('shop_id', order.shop_id).eq('order_sn', order.order_sn).order('id').limit(201).abortSignal(current.signal)
+        window.supabaseClient.from('shopee_order_items').select('id,shop_id,item_name,model_name,quantity,unit_price')
+          .eq('shop_id', order.shop_id).eq('order_sn', order.order_sn).order('id').limit(ITEM_LIMIT + 1).abortSignal(current.signal)
       ]), current);
       if (id !== detailId || !dialog.open) return;
       if (header.error || items.error || !header.data) throw new Error('Não foi possível carregar os detalhes deste pedido. Feche e tente novamente.');
       const info = header.data;
       const lines = items.data || [];
+      const receipt = estimate(info, lines, lines.length <= ITEM_LIMIT);
+      const receiptSummary = receipt.kind === 'estimated' ? `<dl class="orders-receipt-summary"><div><dt>Valor dos itens</dt><dd>${centsText(receipt.grossCents)}</dd></div><div><dt>Comissão estimada</dt><dd>${centsText(receipt.commissionCents)}</dd></div><div><dt>Recebimento estimado</dt><dd>${centsText(receipt.receiptCents)}</dd></div></dl>` : `<p class="orders-estimate-note">Recebimento estimado não disponível: ${escape(receipt.reason)}.</p>`;
+      const itemMarkup = lines.slice(0, ITEM_LIMIT).map(item => {
+        const cost = receipt.kind === 'estimated' ? window.mavisOrderCommission.calculateLine(item) : null;
+        return `<tr><td>${escape(item.item_name || 'Produto sem nome')}<small>${escape(item.model_name || '')}</small></td><td>${escape(item.quantity ?? '—')}</td><td class="orders-money">${amountText(item.unit_price)}</td><td class="orders-money">${cost ? `${centsText(cost.commissionCents)}<small>${cost.rate}% + ${centsText(cost.fixedCents)} / unidade</small>` : '—'}</td><td class="orders-money">${cost ? centsText(cost.receiptCents) : '—'}</td></tr>`;
+      }).join('');
       el('orders-detail-body').innerHTML = `
         <div class="orders-detail-overview"><span>${escape(shopName(order.shop_id))}</span>${badge(info.status)}<strong>${amountText(info.total_amount)}</strong></div>
         <dl class="orders-detail-meta"><div><dt>Criado em</dt><dd>${dateText(info.created_at)}</dd></div><div><dt>Atualizado na origem</dt><dd>${dateText(info.updated_at)}</dd></div><div><dt>Importado em</dt><dd>${dateText(info.synced_at)}</dd></div><div><dt>Pagamento</dt><dd>${escape(info.payment_method || 'Não informado')}</dd></div></dl>
-        <h3>Itens do pedido</h3>${lines.length ? `<div class="orders-table-scroll"><table class="orders-table"><thead><tr><th scope="col">Produto / Variação</th><th scope="col">Quantidade</th><th scope="col" class="orders-money">Preço unitário</th></tr></thead><tbody>${lines.slice(0, 200).map((item) => `<tr><td>${escape(item.item_name || 'Produto sem nome')}<small>${escape(item.model_name || '')}</small></td><td>${escape(item.quantity ?? '—')}</td><td class="orders-money">${amountText(item.unit_price)}</td></tr>`).join('')}</tbody></table></div>${lines.length > 200 ? '<p>Exibindo os primeiros 200 itens deste pedido.</p>' : ''}` : `<p>Itens detalhados não disponíveis na importação.${info.items_summary ? ` ${escape(info.items_summary)}` : ''}</p>`}
+        ${receiptSummary}<p class="orders-estimate-note">Recebimento estimado = valor dos itens − comissão por unidade. O repasse confirmado pode incluir outros ajustes da Shopee.</p>
+        <h3>Itens do pedido</h3>${lines.length ? `<div class="orders-table-scroll"><table class="orders-table"><thead><tr><th scope="col">Produto / Variação</th><th scope="col">Quantidade</th><th scope="col" class="orders-money">Preço unitário</th><th scope="col" class="orders-money">Comissão da linha</th><th scope="col" class="orders-money">Recebimento da linha</th></tr></thead><tbody>${itemMarkup}</tbody></table></div>${lines.length > ITEM_LIMIT ? '<p>Exibindo os primeiros 200 itens deste pedido. A estimativa exige todos os itens.</p>' : ''}` : `<p>Itens detalhados não disponíveis na importação.${info.items_summary ? ` ${escape(info.items_summary)}` : ''}</p>`}
         <h3>Endereço de entrega</h3><p class="orders-address">${escape(info.shipping_address || 'Não informado na importação.')}</p>`;
     } catch (error) {
       if (id === detailId && dialog.open) el('orders-detail-body').textContent = error.message || 'Não foi possível carregar os detalhes.';
