@@ -149,3 +149,12 @@ test('sign out aborts pending reads and clears the orders list', async () => {
   assert.equal(h.nodes.get('orders-results').hidden, true);
   assert.equal(op(h.calls.at(-1), 'abortSignal')[0][1].aborted, true);
 });
+
+test('current connection names replace legacy shop labels without changing the authorized scope', async () => {
+  const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: [order('CURRENT', 2)] } : undefined });
+  await h.window.mavisOrders.open();
+  h.events.get('mavis:shop-connections-updated')({ detail: { connections: [{ shop_id: 2, shop_name: 'Nome atualizado <Loja B>' }] } });
+  await flush();
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Nome atualizado &lt;Loja B&gt;/);
+  assert.deepEqual(Array.from(op(h.calls.at(-1), 'in')[0][2]), ['1', '2']);
+});

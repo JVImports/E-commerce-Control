@@ -25,12 +25,16 @@
   let page = 0;
   let rows = [];
   let shops = null;
+  let connectionNames = new Map();
   let requestId = 0;
   let controller = null;
   let detailId = 0;
   let detailController = null;
   let filters = { search: '', status: '', from: '', to: '' };
   const el = (id) => document.getElementById(id);
+  const shopName = (shopId) => connectionNames.get(String(shopId))
+    || window.mavisIntegrations?.state?.oauth?.connections?.find((connection) => String(connection.external_shop_id) === String(shopId))?.shop_name
+    || shops?.get(String(shopId)) || String(shopId);
 
   // The deadline also covers auth refresh, which can otherwise wait indefinitely.
   async function bounded(work, signalController) {
@@ -183,7 +187,7 @@
       message('');
       el('orders-results').hidden = false;
       el('orders-rows').innerHTML = rows.map((order, index) => `<tr>
-        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shops.get(String(order.shop_id)) || order.shop_id)}</td>
+        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td>
         <td class="orders-date">${dateText(order.created_at)}</td><td>${badge(order.status)}</td><td>${escape(order.buyer_username || 'Não informado')}</td>
         <td class="orders-money">${amountText(order.total_amount)}</td><td><button type="button" class="orders-button small" data-order-index="${index}" aria-label="Ver pedido ${escape(order.order_sn)}">Ver pedido</button></td></tr>`).join('');
       el('orders-summary-count').textContent = `${rows.length} pedidos nesta página`;
@@ -222,7 +226,7 @@
       const info = header.data;
       const lines = items.data || [];
       el('orders-detail-body').innerHTML = `
-        <div class="orders-detail-overview"><span>${escape(shops.get(String(order.shop_id)) || order.shop_id)}</span>${badge(info.status)}<strong>${amountText(info.total_amount)}</strong></div>
+        <div class="orders-detail-overview"><span>${escape(shopName(order.shop_id))}</span>${badge(info.status)}<strong>${amountText(info.total_amount)}</strong></div>
         <dl class="orders-detail-meta"><div><dt>Criado em</dt><dd>${dateText(info.created_at)}</dd></div><div><dt>Atualizado na origem</dt><dd>${dateText(info.updated_at)}</dd></div><div><dt>Importado em</dt><dd>${dateText(info.synced_at)}</dd></div><div><dt>Pagamento</dt><dd>${escape(info.payment_method || 'Não informado')}</dd></div></dl>
         <h3>Itens do pedido</h3>${lines.length ? `<div class="orders-table-scroll"><table class="orders-table"><thead><tr><th scope="col">Produto / Variação</th><th scope="col">Quantidade</th><th scope="col" class="orders-money">Preço unitário</th></tr></thead><tbody>${lines.slice(0, 200).map((item) => `<tr><td>${escape(item.item_name || 'Produto sem nome')}<small>${escape(item.model_name || '')}</small></td><td>${escape(item.quantity ?? '—')}</td><td class="orders-money">${amountText(item.unit_price)}</td></tr>`).join('')}</tbody></table></div>${lines.length > 200 ? '<p>Exibindo os primeiros 200 itens deste pedido.</p>' : ''}` : `<p>Itens detalhados não disponíveis na importação.${info.items_summary ? ` ${escape(info.items_summary)}` : ''}</p>`}
         <h3>Endereço de entrega</h3><p class="orders-address">${escape(info.shipping_address || 'Não informado na importação.')}</p>`;
@@ -234,9 +238,13 @@
   function refresh() { shops = null; page = 0; return load(); }
   function open() { visible = true; return refresh(); }
   function leave() { visible = false; requestId++; controller?.abort(); closeDetail(); rows = []; if (initialized) { el('orders-rows').innerHTML = ''; el('orders-results').hidden = true; } }
-  function resetAccount() { leave(); shops = null; page = 0; filters = { search: '', status: '', from: '', to: '' }; if (initialized) el('orders-filters').reset(); }
+  function resetAccount() { leave(); shops = null; connectionNames = new Map(); page = 0; filters = { search: '', status: '', from: '', to: '' }; if (initialized) { el('orders-filters').reset(); el('orders-to').setCustomValidity(''); } }
   window.mavisOrders = Object.freeze({ open, refresh, leave });
   window.addEventListener('mavis:auth-expired', resetAccount);
   window.addEventListener('mavis:auth-changed', resetAccount);
-  window.addEventListener('mavis:shop-connections-updated', () => { shops = null; if (visible) refresh(); });
+  window.addEventListener('mavis:shop-connections-updated', (event) => {
+    connectionNames = new Map((event.detail?.connections || []).map((connection) => [String(connection.shop_id), connection.shop_name]));
+    shops = null;
+    if (visible) refresh();
+  });
 })();
