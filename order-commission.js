@@ -10,7 +10,7 @@
     if (item?.unit_price == null || item?.quantity == null || String(item.unit_price).trim() === '' || String(item.quantity).trim() === '') return null;
     const price = Number(item.unit_price);
     const quantity = Number(item.quantity);
-    if (!Number.isFinite(price) || price < 0 || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
+    if (!Number.isFinite(price) || price <= 0 || !Number.isSafeInteger(quantity) || quantity <= 0) return null;
     const unitCents = Math.round(price * 100);
     if (!Number.isSafeInteger(unitCents)) return null;
     const tier = tiers.find(value => unitCents < value.belowCents);
@@ -26,6 +26,7 @@
     if (!Array.isArray(items) || !items.length) return { kind: 'unavailable', reason: 'Itens não disponíveis', receiptCents: null };
     if (!complete) return { kind: 'unavailable', reason: 'Itens incompletos', receiptCents: null };
     if (items.some(item => item.shop_id != null && String(item.shop_id) !== String(order.shop_id))) return { kind: 'unavailable', reason: 'Itens de outra loja', receiptCents: null };
+    if (items.some(item => item.unit_price != null && String(item.unit_price).trim() !== '' && Number(item.unit_price) === 0)) return { kind: 'unavailable', reason: 'Preço pendente de confirmação', receiptCents: null };
     const lines = items.map(calculateLine);
     if (lines.some(line => !line)) return { kind: 'unavailable', reason: 'Preço ou quantidade não informado', receiptCents: null };
     const totals = { kind: 'estimated', grossCents: 0, commissionCents: 0, receiptCents: 0 };

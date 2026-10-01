@@ -31,7 +31,7 @@ test('Pix is ignored and a low priced item is not silently clamped to a differen
 
 test('missing, invalid, incomplete and cross-shop details have no invented fallback to the buyer total', () => {
   const order = { shop_id: 1, total_amount: 100 };
-  for (const items of [[], null, [{ unit_price: null, quantity: 1 }], [{ unit_price: '', quantity: 1 }], [{ unit_price: 50, quantity: 0 }], [{ unit_price: 50, quantity: 1.5 }], [{ unit_price: -1, quantity: 1 }], [{ unit_price: 'invalid', quantity: 1 }], [{ unit_price: 50, quantity: null }], [{ shop_id: 2, unit_price: 50, quantity: 1 }]]) {
+  for (const items of [[], null, [{ unit_price: null, quantity: 1 }], [{ unit_price: 0, quantity: 1 }], [{ unit_price: '', quantity: 1 }], [{ unit_price: 50, quantity: 0 }], [{ unit_price: 50, quantity: 1.5 }], [{ unit_price: -1, quantity: 1 }], [{ unit_price: 'invalid', quantity: 1 }], [{ unit_price: 50, quantity: null }], [{ shop_id: 2, unit_price: 50, quantity: 1 }]]) {
     assert.equal(estimate(order, items).kind, 'unavailable');
     assert.equal(estimate(order, items).receiptCents, null);
   }

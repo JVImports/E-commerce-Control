@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
 import { ORDER_PAGE_LIMIT, orderWindow, sameOrderVersion, shopeeFailure } from "../_shared/shopee-sync-policy.mjs";
+import { orderItemPrice, escrowItemPrice } from "../_shared/shopee-order-prices.mjs";
 import {
   resolveShopeeV3Environment,
   SHOPEE_LIVE_ADS_ORIGIN,
@@ -807,7 +808,7 @@ function buildOrderRecords(shop: ShopRow, orderDetails: Record<string, unknown>[
         item_name: item.item_name ?? null,
         model_name: item.model_name ?? null,
         quantity: asNumber(item.model_quantity_purchased, 0),
-        unit_price: asNumber(item.model_discounted_price ?? item.original_price ?? item.item_price, 0)
+        unit_price: orderItemPrice(item)
       });
     });
   }
@@ -959,9 +960,11 @@ async function syncEscrowStep(shop: ShopRow, credential: ShopeeCredential, batch
   const accessToken = await refreshAccessToken(shop, credential);
   const missing = await getOrdersMissingEscrow(shop, ["COMPLETED", "SHIPPED", "TO_CONFIRM_RECEIVE"]);
   const rows: Record<string, unknown>[] = [];
-  for (const orderSn of missing.slice(0, Math.max(1, batchSize))) {
+  const incomes = new Map<string, any>();
+  for (const orderSn of missing.slice(0, Math.min(50, Math.max(1, batchSize)))) {
     const income = await getEscrowDetail(shop, credential, accessToken, orderSn);
     if (!income) continue;
+    incomes.set(orderSn, income);
     rows.push({
       shop_id: Number(shop.shop_id),
       order_sn: orderSn,
@@ -978,10 +981,35 @@ async function syncEscrowStep(shop: ShopRow, credential: ShopeeCredential, batch
       synced_at: nowIso()
     });
   }
+  const pricesRepaired = await repairEscrowItemPrices(shop, incomes);
   const upserted = await upsertBatches("shopee_escrow", rows, "shop_id,order_sn");
   const remaining = Math.max(missing.length - rows.length, 0);
   await logSync(shop, "escrow", "SUCCESS", `shop=${shop.shop_id} processed=${rows.length} upserted=${upserted} remaining=${remaining}`);
-  return { missingBeforeStep: missing.length, processed: rows.length, upserted, remaining, completed: remaining === 0 };
+  return { missingBeforeStep: missing.length, processed: rows.length, upserted, pricesRepaired, remaining, completed: remaining === 0 };
+}
+
+async function repairEscrowItemPrices(shop: ShopRow, incomes: Map<string, any>) {
+  if (!incomes.size) return 0;
+  const { data, error } = await supabase.from("shopee_order_items")
+    .select("id,order_sn,item_id,model_id,quantity,unit_price")
+    .eq("shop_id", shop.shop_id).in("order_sn", [...incomes.keys()])
+    .or("unit_price.is.null,unit_price.lte.0").limit(1001);
+  if (error) throw error;
+  if ((data ?? []).length > 1000) throw new Error("Price repair exceeded its batch limit; financial checkpoint retained");
+  let repaired = 0;
+  for (const item of data ?? []) {
+    const price = escrowItemPrice(item, incomes.get(item.order_sn)?.items);
+    if (price == null) continue;
+    // Never overwrite a newer order import, another shop, or a confirmed positive price.
+    let write = supabase.from("shopee_order_items").update({ unit_price: price })
+      .eq("shop_id", shop.shop_id).eq("order_sn", item.order_sn).eq("id", item.id)
+      .eq("item_id", item.item_id).eq("model_id", item.model_id).eq("quantity", item.quantity);
+    write = item.unit_price == null ? write.is("unit_price", null) : write.eq("unit_price", item.unit_price);
+    const result = await write.select("id");
+    if (result.error) throw result.error;
+    repaired += (result.data ?? []).length;
+  }
+  return repaired;
 }
 
 async function syncIncomeOverview(shop: ShopRow, credential: ShopeeCredential) {

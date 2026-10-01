@@ -4,6 +4,7 @@ import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import * as policy from '../supabase/functions/_shared/shopee-sync-policy.mjs';
+import * as prices from '../supabase/functions/_shared/shopee-order-prices.mjs';
 
 // Execute the actual Edge Function implementations with controlled network and DB boundaries.
 const sources = Object.fromEntries(await Promise.all(['shopee-sync-v3', 'shopee-oauth-v3', 'shopee-sync-scheduler-v1'].map(async slug =>
@@ -14,7 +15,7 @@ function database(respond = () => ({ data: [], error: null })) {
     from(table) {
       const call = { table, operations: [] };
       const q = { then(resolve, reject) { calls.push(call); return Promise.resolve(respond(call)).then(resolve, reject); } };
-      for (const op of ['select', 'eq', 'in', 'gte', 'order', 'limit', 'single', 'maybeSingle', 'update', 'insert', 'or']) q[op] = (...args) => { call.operations.push([op, ...args]); return q; };
+      for (const op of ['select', 'eq', 'is', 'in', 'gte', 'order', 'limit', 'single', 'maybeSingle', 'update', 'insert', 'or']) q[op] = (...args) => { call.operations.push([op, ...args]); return q; };
       return q;
     },
     rpc(name, args) { const call = { rpc: name, args }; calls.push(call); return Promise.resolve(respond(call)); }
@@ -23,7 +24,7 @@ function database(respond = () => ({ data: [], error: null })) {
 }
 function load(slug, db, names, replacements = {}) {
   const source = stripTypeScriptTypes(sources[slug].replace(/^import[\s\S]*?;\r?\n/gm, ''), { mode: 'transform' });
-  const context = { ...policy, Date, URL, Response, Request, AbortSignal, TextEncoder, crypto: globalThis.crypto,
+  const context = { ...policy, ...prices, Date, URL, Response, Request, AbortSignal, TextEncoder, crypto: globalThis.crypto,
     createClient: () => db, resolveShopeeV3Environment: () => ({ environment: 'live', partnerOrigin: 'https://partner.example', adsOrigin: 'https://ads.example' }),
     SHOPEE_LIVE_PARTNER_ORIGIN: 'https://partner.example', SHOPEE_SANDBOX_PARTNER_ORIGIN: 'https://sandbox.example', SHOPEE_LIVE_ADS_ORIGIN: 'https://ads.example',
     Deno: { env: { get: name => name === 'SHOPEE_THIRD_PARTY_ENVIRONMENT' ? 'live' : 'test-only' }, serve: fn => { context.handler = fn; } }, replacements };
@@ -32,6 +33,54 @@ function load(slug, db, names, replacements = {}) {
 }
 const shop = { shop_id: 11, connection_id: 'connection', authorization_id: 'authorization', account_id: 'account', auth_expires_at: null, token_expire_in: null, refresh_token: 'test-only' };
 const detail = sn => ({ order_sn: sn, order_status: 'READY_TO_SHIP', create_time: 1000, update_time: 2000, total_amount: 20, item_list: [{ item_id: 1, model_id: 2, model_quantity_purchased: 1, model_discounted_price: 20, item_name: 'item' }] });
+
+test('order prices preserve missing or bundle prices as unknown instead of zero or the original list price', () => {
+  assert.equal(prices.orderItemPrice({ model_discounted_price: 0, model_original_price: 30 }), null);
+  assert.equal(prices.orderItemPrice({ model_discounted_price: 30, promotion_type: 'bundle_deal' }), null);
+  assert.equal(prices.orderItemPrice({ model_discounted_price: 30, promotion_list: [{ promotion_type: 'bundle_deal' }] }), null);
+  assert.equal(prices.orderItemPrice({}), null);
+  assert.equal(prices.orderItemPrice({ model_original_price: 25 }), 25);
+  assert.equal(prices.orderItemPrice({ model_discounted_price: 20, model_original_price: 30 }), 20);
+  const { db } = database();
+  const fn = load('shopee-sync-v3', db, ['buildOrderRecords']);
+  const input = detail('BUNDLE'); input.item_list[0].model_discounted_price = 0;
+  assert.equal(fn.buildOrderRecords(shop, [input]).itemRows[0].unit_price, null);
+});
+
+test('financial item subtotals are divided by matching purchased quantity without guessing ambiguous or fractional-cent prices', () => {
+  const item = { item_id: 1, model_id: 2, quantity: 2 };
+  const financial = { item_id: 1, model_id: 2, quantity_purchased: 2, discounted_price: 39.98 };
+  assert.equal(prices.escrowItemPrice(item, [financial]), 19.99);
+  for (const lines of [null, [], [financial, financial], [{ ...financial, model_id: 3 }], [{ ...financial, quantity_purchased: 1 }], [{ ...financial, discounted_price: 39.99 }], [{ ...financial, discounted_price: null }]]) assert.equal(prices.escrowItemPrice(item, lines), null);
+});
+
+test('financial price repairs only update unresolved prices in the authorized shop and preserve concurrently confirmed prices', async () => {
+  const item = { id: 10, order_sn: 'BUNDLE', item_id: 1, model_id: 2, quantity: 2, unit_price: 0 };
+  const { db, calls } = database(call => ({ data: call.operations.some(op => op[0] === 'update') ? [] : [item], error: null }));
+  const fn = load('shopee-sync-v3', db, ['repairEscrowItemPrices']);
+  const count = await fn.repairEscrowItemPrices(shop, new Map([['BUNDLE', { items: [{ item_id: 1, model_id: 2, quantity_purchased: 2, discounted_price: 39.98 }] }]]));
+  assert.equal(count, 0, 'a concurrent update means the old-price condition no longer matches');
+  assert.equal(calls.length, 2);
+  const write = calls[1].operations;
+  assert.equal(write.find(op => op[0] === 'update')[1].unit_price, 19.99);
+  for (const [key, value] of [['shop_id', 11], ['order_sn', 'BUNDLE'], ['id', 10], ['quantity', 2], ['unit_price', 0]]) assert.ok(write.some(op => op[0] === 'eq' && op[1] === key && op[2] === value));
+});
+
+test('the existing financial batch repairs nullable prices before saving escrow and retains missing escrow on a failed repair', async () => {
+  for (const failed of [false, true]) {
+    const { db, calls } = database(call => call.operations.some(op => op[0] === 'update') ? { data: [{ id: 10 }], error: failed ? new Error('write failed') : null } : { data: [{ id: 10, order_sn: 'BUNDLE', item_id: 1, model_id: 2, quantity: 2, unit_price: null }], error: null });
+    let saved = false;
+    const fn = load('shopee-sync-v3', db, ['syncEscrowStep'], {
+      logSync: async () => {}, refreshAccessToken: async () => 'test-only',
+      getOrdersMissingEscrow: async () => ['BUNDLE'],
+      getEscrowDetail: async () => ({ items: [{ item_id: 1, model_id: 2, quantity_purchased: 2, discounted_price: 39.98 }] }),
+      upsertBatches: async () => { assert.ok(calls.some(call => call.operations.some(op => op[0] === 'update'))); saved = true; return 1; }
+    });
+    if (failed) { await assert.rejects(fn.syncEscrowStep(shop, {}), /write failed/); assert.equal(saved, false); }
+    else { const result = await fn.syncEscrowStep(shop, {}); assert.equal(saved, true); assert.equal(result.pricesRepaired, 1); }
+    assert.ok(calls[1].operations.some(op => op[0] === 'is' && op[1] === 'unit_price' && op[2] === null));
+  }
+});
 function incremental({ pages = [], missing = false, missingItems = false, writeError = null, existing = [], watermark = '1000', pending = '' } = {}) {
   const states = new Map([['orders_updated_until', watermark], ['orders_update_window', pending]]);
   const writes = [], requests = [];

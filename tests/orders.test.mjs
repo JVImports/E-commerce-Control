@@ -201,3 +201,15 @@ test('a truncated item list never displays a partial receipt as the full estimat
   assert.match(h.nodes.get('orders-rows').innerHTML, /Itens incompletos/);
   assert.match(h.nodes.get('orders-summary-receipt').textContent, /não disponível/);
 });
+
+test('a paid order with zero imported bundle prices shows pending prices without invented commission or receipt', async () => {
+  const lines = [{ id: 1, shop_id: 1, item_name: 'Variação A', quantity: 1, unit_price: 0 }, { id: 2, shop_id: 1, item_name: 'Variação B', quantity: 1, unit_price: 0 }];
+  const info = { ...order('BUNDLE'), total_amount: 41.27 };
+  const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: op(call, 'maybeSingle').length ? info : [{ ...info, shopee_order_items: lines }] } : call.table === 'shopee_order_items' ? { data: lines } : undefined });
+  await h.window.mavisOrders.open(); h.clickDetail(0); await flush();
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Preço pendente de confirmação/);
+  assert.match(h.nodes.get('orders-summary-receipt').textContent, /não disponível/);
+  const html = h.nodes.get('orders-detail-body').innerHTML;
+  assert.match(html, /Preço pendente/);
+  assert.doesNotMatch(html.replace(/\s/g, ''), /R\$0,00|-R\$9,00|R\$4,50/);
+});

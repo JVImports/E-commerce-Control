@@ -21,6 +21,7 @@
   const dateText = (value) => value && Number.isFinite(new Date(value).getTime()) ? dates.format(new Date(value)) : 'Não informado';
   const amountText = (value) => value !== null && value !== undefined && Number.isFinite(Number(value)) ? money.format(Number(value)) : 'Não informado';
   const centsText = (value) => money.format(value / 100);
+  const itemPriceText = (value) => value != null && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) > 0 ? amountText(value) : 'Preço pendente';
   const estimate = (order, items = order.shopee_order_items, complete = Array.isArray(items) && items.length <= ITEM_LIMIT) => window.mavisOrderCommission.estimate(order, items, complete);
   const receiptCell = (result) => result.kind === 'estimated' ? `<strong>${centsText(result.receiptCents)}</strong>` : `<span class="orders-estimate-unavailable">—<small>${escape(result.reason)}</small></span>`;
   function productsCell(order) {
@@ -245,7 +246,7 @@
       const receiptSummary = receipt.kind === 'estimated' ? `<dl class="orders-receipt-summary"><div><dt>Valor dos itens</dt><dd>${centsText(receipt.grossCents)}</dd></div><div><dt>Comissão estimada</dt><dd>${centsText(receipt.commissionCents)}</dd></div><div><dt>Recebimento estimado</dt><dd>${centsText(receipt.receiptCents)}</dd></div></dl>` : `<p class="orders-estimate-note">Recebimento estimado não disponível: ${escape(receipt.reason)}.</p>`;
       const itemMarkup = lines.slice(0, ITEM_LIMIT).map(item => {
         const cost = receipt.kind === 'estimated' ? window.mavisOrderCommission.calculateLine(item) : null;
-        return `<tr><td>${escape(item.item_name || 'Produto sem nome')}<small>${escape(item.model_name || '')}</small></td><td>${escape(item.quantity ?? '—')}</td><td class="orders-money">${amountText(item.unit_price)}</td><td class="orders-money">${cost ? `${centsText(cost.commissionCents)}<small>${cost.rate}% + ${centsText(cost.fixedCents)} / unidade</small>` : '—'}</td><td class="orders-money">${cost ? centsText(cost.receiptCents) : '—'}</td></tr>`;
+        return `<tr><td>${escape(item.item_name || 'Produto sem nome')}<small>${escape(item.model_name || '')}</small></td><td>${escape(item.quantity ?? '—')}</td><td class="orders-money">${itemPriceText(item.unit_price)}</td><td class="orders-money">${cost ? `${centsText(cost.commissionCents)}<small>${cost.rate}% + ${centsText(cost.fixedCents)} / unidade</small>` : '—'}</td><td class="orders-money">${cost ? centsText(cost.receiptCents) : '—'}</td></tr>`;
       }).join('');
       el('orders-detail-body').innerHTML = `
         <div class="orders-detail-overview"><span>${escape(shopName(order.shop_id))}</span>${badge(info.status)}<strong>${amountText(info.total_amount)}</strong></div>
