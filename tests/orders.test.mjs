@@ -131,7 +131,7 @@ test('late responses cannot overwrite the currently selected store or a closed s
 test('details are bound to both shop and order, bounded, and all imported text is escaped', async () => {
   const dangerous = '<img src=x onerror=alert(1)>';
   const h = harness({ respond: call => {
-    if (call.table === 'shopee_orders') return op(call, 'maybeSingle').length ? { data: { ...order('SAME', 2), shipping_address: dangerous, payment_method: dangerous } } : { data: [{ ...order('SAME', 2), buyer_username: dangerous }] };
+    if (call.table === 'shopee_orders') return op(call, 'maybeSingle').length ? { data: { ...order('SAME', 2), shipping_address: dangerous, payment_method: dangerous } } : { data: [{ ...order('SAME', 2), buyer_username: dangerous, shopee_order_items: [{ shop_id: 2, item_name: dangerous, model_name: dangerous, quantity: 2, unit_price: 5 }, { shop_id: 1, item_name: 'WRONG-SHOP-PRODUCT' }] }] };
     if (call.table === 'shopee_order_items') return { data: [{ item_name: dangerous, model_name: dangerous, quantity: 2, unit_price: 5 }] };
   } });
   await h.window.mavisOrders.open(); h.clickDetail(0); await flush();
@@ -140,6 +140,9 @@ test('details are bound to both shop and order, bounded, and all imported text i
   assert.match(h.nodes.get('orders-detail-body').innerHTML, /&lt;img/);
   assert.doesNotMatch(h.nodes.get('orders-detail-body').innerHTML, /<img/);
   assert.doesNotMatch(h.nodes.get('orders-rows').innerHTML, /<img/);
+  assert.match(h.nodes.get('orders-rows').innerHTML, /class="orders-product"><span>&lt;img/);
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Qtd: 2/);
+  assert.doesNotMatch(h.nodes.get('orders-rows').innerHTML, /WRONG-SHOP-PRODUCT/);
   assert.match(h.nodes.get('orders-freshness').innerHTML, /Confira a sincronização/);
   h.nodes.get('orders-detail-close').fire('click'); assert.equal(h.nodes.get('orders-detail').open, false);
 });
@@ -169,7 +172,7 @@ test('receipt estimates use item prices and quantities in the same bounded reque
   ] } : undefined });
   await h.window.mavisOrders.open();
   const query = h.calls.find(call => call.table === 'shopee_orders');
-  assert.match(op(query, 'select')[0][1], /shopee_order_items\(shop_id,quantity,unit_price\)/);
+  assert.match(op(query, 'select')[0][1], /shopee_order_items\(shop_id,item_name,model_name,quantity,unit_price\)/);
   assert.deepEqual(JSON.parse(JSON.stringify(op(query, 'limit'))), [['limit', 201, { referencedTable: 'shopee_order_items' }]]);
   assert.equal(h.calls.length, 2, 'no additional per-order requests');
   assert.match(h.nodes.get('orders-rows').innerHTML.replace(/\s/g, ''), /R\$118,98/);

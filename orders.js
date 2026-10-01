@@ -23,6 +23,13 @@
   const centsText = (value) => money.format(value / 100);
   const estimate = (order, items = order.shopee_order_items, complete = Array.isArray(items) && items.length <= ITEM_LIMIT) => window.mavisOrderCommission.estimate(order, items, complete);
   const receiptCell = (result) => result.kind === 'estimated' ? `<strong>${centsText(result.receiptCents)}</strong>` : `<span class="orders-estimate-unavailable">—<small>${escape(result.reason)}</small></span>`;
+  function productsCell(order) {
+    const items = (Array.isArray(order.shopee_order_items) ? order.shopee_order_items : []).filter(item => String(item.shop_id) === String(order.shop_id));
+    if (!items.length) return '<span class="orders-product-unavailable">Itens não disponíveis</span>';
+    const products = items.slice(0, 3).map(item => `<div class="orders-product"><span>${escape(item.item_name || 'Produto não informado')}</span><small>${item.model_name ? `${escape(item.model_name)} · ` : ''}Qtd: ${escape(item.quantity ?? '—')}</small></div>`).join('');
+    const more = items.length > ITEM_LIMIT ? 'Mais itens em “Ver pedido”' : `+ ${items.length - 3} ${items.length - 3 === 1 ? 'item' : 'itens'} em “Ver pedido”`;
+    return products + (items.length > 3 ? `<small class="orders-product-more">${more}</small>` : '');
+  }
   const badge = (status) => `<span class="orders-badge ${STATUS[status]?.[1] || 'muted'}">${escape(STATUS[status]?.[0] || status || 'Não informado')}</span>`;
   let initialized = false;
   let visible = false;
@@ -73,7 +80,7 @@
         <div id="orders-message" class="orders-message" role="status" aria-live="polite"></div>
         <div id="orders-results" hidden>
           <div class="orders-summary"><span id="orders-summary-count"></span><span id="orders-summary-amount"></span><span id="orders-summary-receipt"></span><span id="orders-period-label">Todo o histórico · Horário de Brasília</span></div>
-          <div class="orders-table-scroll" tabindex="0" role="region" aria-label="Tabela de pedidos"><table class="orders-table"><thead><tr><th scope="col">Pedido</th><th scope="col">Loja</th><th scope="col">Criado em</th><th scope="col">Status</th><th scope="col">Comprador</th><th scope="col" class="orders-money">Valor do pedido</th><th scope="col" class="orders-money">Recebimento estimado</th><th scope="col">Detalhes</th></tr></thead><tbody id="orders-rows"></tbody></table></div>
+          <div class="orders-table-scroll" tabindex="0" role="region" aria-label="Tabela de pedidos"><table class="orders-table"><thead><tr><th scope="col">Pedido</th><th scope="col">Loja</th><th scope="col">Produtos</th><th scope="col">Criado em</th><th scope="col">Status</th><th scope="col">Comprador</th><th scope="col" class="orders-money">Valor do pedido</th><th scope="col" class="orders-money">Recebimento estimado</th><th scope="col">Detalhes</th></tr></thead><tbody id="orders-rows"></tbody></table></div>
           <p class="orders-estimate-note">Estimativa pela tabela de comissão informada, calculada por unidade sobre o valor dos itens. Frete e outros ajustes do repasse não entram no cálculo. Confira a composição em “Ver pedido”.</p>
         </div>
         <div class="orders-pagination"><span id="orders-page" aria-live="polite"></span><div><button type="button" id="orders-prev" class="orders-button" disabled>Anterior</button><button type="button" id="orders-next" class="orders-button" disabled>Próxima</button></div></div>
@@ -164,7 +171,7 @@
         const ids = selectedIds();
         if (!ids.length) return { data: [], noShops: true };
         let query = client.from('shopee_orders')
-          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at,shopee_order_items(shop_id,quantity,unit_price)')
+          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at,shopee_order_items(shop_id,item_name,model_name,quantity,unit_price)')
           .in('shop_id', ids)
           .limit(ITEM_LIMIT + 1, { referencedTable: 'shopee_order_items' })
           .order('created_at', { ascending: false, nullsFirst: false })
@@ -194,7 +201,7 @@
       message('');
       el('orders-results').hidden = false;
       el('orders-rows').innerHTML = rows.map((order, index) => `<tr>
-        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td>
+        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td><td class="orders-products">${productsCell(order)}</td>
         <td class="orders-date">${dateText(order.created_at)}</td><td>${badge(order.status)}</td><td>${escape(order.buyer_username || 'Não informado')}</td>
         <td class="orders-money">${amountText(order.total_amount)}</td><td class="orders-money orders-receipt">${receiptCell(estimate(order))}</td><td><button type="button" class="orders-button small" data-order-index="${index}" aria-label="Ver pedido ${escape(order.order_sn)}">Ver pedido</button></td></tr>`).join('');
       el('orders-summary-count').textContent = `${rows.length} pedidos nesta página`;
