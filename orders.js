@@ -24,12 +24,22 @@
   const itemPriceText = (value) => value != null && String(value).trim() !== '' && Number.isFinite(Number(value)) && Number(value) > 0 ? amountText(value) : 'Preço pendente';
   const estimate = (order, items = order.shopee_order_items, complete = Array.isArray(items) && items.length <= ITEM_LIMIT) => window.mavisOrderCommission.estimate(order, items, complete);
   const receiptCell = (result) => result.kind === 'estimated' ? `<strong>${centsText(result.receiptCents)}</strong>` : `<span class="orders-estimate-unavailable">—<small>${escape(result.reason)}</small></span>`;
-  function productsCell(order) {
-    const items = (Array.isArray(order.shopee_order_items) ? order.shopee_order_items : []).filter(item => String(item.shop_id) === String(order.shop_id));
+  const orderItems = order => (Array.isArray(order.shopee_order_items) ? order.shopee_order_items : []).filter(item => String(item.shop_id) === String(order.shop_id));
+  function imageUrl(value) {
+    if (!value) return null;
+    try {
+      const url = new URL(value);
+      const host = url.hostname;
+      return url.protocol === 'https:' && !url.username && !url.password && (/(^|\.)shopee\.(com\.br|sg|com\.my|co\.id|co\.th|vn|tw|ph|com|cn)$/.test(host) || /(^|\.)susercontent\.com$/.test(host)) ? url.href : null;
+    } catch { return null; }
+  }
+  function productsCell(order, index, images) {
+    const items = orderItems(order);
     if (!items.length) return '<span class="orders-product-unavailable">Itens não disponíveis</span>';
-    const products = items.slice(0, 3).map(item => `<div class="orders-product"><span>${escape(item.item_name || 'Produto não informado')}</span><small>${item.model_name ? `${escape(item.model_name)} · ` : ''}Qtd: ${escape(item.quantity ?? '—')}</small></div>`).join('');
-    const more = items.length > ITEM_LIMIT ? 'Mais itens em “Ver pedido”' : `+ ${items.length - 3} ${items.length - 3 === 1 ? 'item' : 'itens'} em “Ver pedido”`;
-    return products + (items.length > 3 ? `<small class="orders-product-more">${more}</small>` : '');
+    const photo = images.get(`${order.shop_id}:${items[0].item_id}`);
+    return `<button type="button" class="orders-product-chip" data-products-preview="${index}" data-order-index="${index}" aria-label="Produtos do pedido ${escape(order.order_sn)}: ${escape(items[0].item_name || 'Produto não informado')}. Abrir detalhes">
+      <span class="orders-product-thumb" aria-hidden="true"><span>▧</span>${photo ? `<img src="${escape(photo)}" alt="" width="36" height="36" loading="lazy" decoding="async" referrerpolicy="no-referrer">` : ''}</span>
+      <span class="orders-product-name">${escape(items[0].item_name || 'Produto não informado')}</span>${items.length > 1 ? `<span class="orders-product-count">+${items.length - 1}${items.length > ITEM_LIMIT ? '+' : ''}</span>` : ''}</button>`;
   }
   const badge = (status) => `<span class="orders-badge ${STATUS[status]?.[1] || 'muted'}">${escape(STATUS[status]?.[0] || status || 'Não informado')}</span>`;
   let initialized = false;
@@ -42,6 +52,8 @@
   let controller = null;
   let detailId = 0;
   let detailController = null;
+  let previewTrigger = null;
+  let previewTimer;
   let filters = { search: '', status: '', from: '', to: '' };
   const el = (id) => document.getElementById(id);
   const shopName = (shopId) => {
@@ -50,7 +62,7 @@
   };
 
   // The deadline also covers auth refresh, which can otherwise wait indefinitely.
-  async function bounded(work, signalController) {
+  async function bounded(work, signalController, timeoutMs = TIMEOUT_MS) {
     let timer;
     try {
       return await Promise.race([
@@ -58,7 +70,7 @@
         new Promise((_, reject) => { timer = setTimeout(() => {
           signalController.abort();
           reject(new Error('A consulta demorou mais que o esperado. Tente novamente.'));
-        }, TIMEOUT_MS); })
+        }, timeoutMs); })
       ]);
     } finally { clearTimeout(timer); }
   }
@@ -86,7 +98,8 @@
         </div>
         <div class="orders-pagination"><span id="orders-page" aria-live="polite"></span><div><button type="button" id="orders-prev" class="orders-button" disabled>Anterior</button><button type="button" id="orders-next" class="orders-button" disabled>Próxima</button></div></div>
       </section>
-      <dialog id="orders-detail" class="orders-dialog" aria-labelledby="orders-detail-title"><div class="orders-dialog-heading"><h2 id="orders-detail-title">Detalhes do pedido</h2><button type="button" id="orders-detail-close" class="orders-button" aria-label="Fechar detalhes">Fechar</button></div><div id="orders-detail-body" aria-live="polite"></div></dialog>`;
+      <dialog id="orders-detail" class="orders-dialog" aria-labelledby="orders-detail-title"><div class="orders-dialog-heading"><h2 id="orders-detail-title">Detalhes do pedido</h2><button type="button" id="orders-detail-close" class="orders-button" aria-label="Fechar detalhes">Fechar</button></div><div id="orders-detail-body" aria-live="polite"></div></dialog>
+      <div id="orders-products-preview" class="orders-products-preview" role="tooltip" popover="manual" hidden></div>`;
     el('orders-filters').addEventListener('submit', (event) => {
       event.preventDefault();
       const from = el('orders-from').value;
@@ -114,6 +127,25 @@
       if (event.target.closest('[data-orders-retry]')) load();
       if (event.target.closest('[data-orders-integrations]')) window.switchView?.('shopee-sync');
     });
+    for (const name of ['mouseover', 'focusin']) root.addEventListener(name, event => {
+      const trigger = event.target.closest('[data-products-preview]');
+      if (trigger) showProductsPreview(trigger);
+    });
+    root.addEventListener('mouseout', event => {
+      const trigger = event.target.closest('[data-products-preview]');
+      if (trigger && !trigger.contains(event.relatedTarget)) previewTimer = setTimeout(hideProductsPreview, 150);
+    });
+    root.addEventListener('focusout', event => { if (event.target.closest('[data-products-preview]')) hideProductsPreview(); });
+    root.addEventListener('keydown', event => { if (event.key === 'Escape') hideProductsPreview(); });
+    root.addEventListener('error', event => { if (event.target.matches?.('.orders-product-thumb img')) event.target.hidden = true; }, true);
+    el('orders-products-preview').addEventListener('mouseenter', () => clearTimeout(previewTimer));
+    el('orders-products-preview').addEventListener('mouseleave', hideProductsPreview);
+    window.addEventListener('resize', hideProductsPreview);
+    window.addEventListener('scroll', event => {
+      if (el('orders-products-preview').contains(event.target)) return;
+      if (previewTrigger && document.activeElement === previewTrigger) positionProductsPreview();
+      else hideProductsPreview();
+    }, true);
     el('orders-detail-close').addEventListener('click', closeDetail);
     el('orders-detail').addEventListener('close', cancelDetail);
     el('orders-detail').addEventListener('click', (event) => {
@@ -122,6 +154,56 @@
       if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDetail();
     });
     initialized = true;
+  }
+
+  function hideProductsPreview() {
+    clearTimeout(previewTimer);
+    previewTrigger?.removeAttribute('aria-describedby');
+    previewTrigger = null;
+    if (!initialized) return;
+    const preview = el('orders-products-preview');
+    preview.hidePopover?.();
+    preview.hidden = true;
+    preview.innerHTML = '';
+  }
+  function showProductsPreview(trigger) {
+    clearTimeout(previewTimer);
+    if (trigger === previewTrigger) return;
+    hideProductsPreview();
+    const order = rows[Number(trigger.dataset.productsPreview)];
+    if (!order) return;
+    const items = orderItems(order);
+    const preview = el('orders-products-preview');
+    preview.innerHTML = `<strong class="orders-preview-heading">Produtos do pedido</strong>${items.slice(0, ITEM_LIMIT).map(item => `<div class="orders-preview-item"><strong>${escape(item.item_name || 'Produto não informado')}</strong><span>${item.model_name ? `${escape(item.model_name)} · ` : ''}Qtd: ${escape(item.quantity ?? '—')}</span></div>`).join('')}${items.length > ITEM_LIMIT ? '<p>Mais itens em “Ver pedido”.</p>' : ''}`;
+    preview.hidden = false;
+    preview.showPopover?.();
+    previewTrigger = trigger;
+    trigger.setAttribute('aria-describedby', 'orders-products-preview');
+    positionProductsPreview();
+  }
+  function positionProductsPreview() {
+    const anchor = previewTrigger.getBoundingClientRect();
+    if (anchor.bottom < 0 || anchor.top > window.innerHeight || anchor.right < 0 || anchor.left > window.innerWidth) { hideProductsPreview(); return; }
+    const preview = el('orders-products-preview');
+    const rect = preview.getBoundingClientRect();
+    preview.style.left = `${Math.max(8, Math.min(anchor.left, window.innerWidth - rect.width - 8))}px`;
+    preview.style.top = `${Math.max(8, anchor.bottom + rect.height + 8 <= window.innerHeight ? anchor.bottom + 8 : anchor.top - rect.height - 8)}px`;
+  }
+
+  async function productImages(client, orders, parent) {
+    const firstItems = orders.slice(0, PAGE_SIZE).map(order => ({ shop_id: order.shop_id, item: orderItems(order)[0] })).filter(row => row.item?.item_id != null);
+    if (!firstItems.length) return new Map();
+    const imagesController = new AbortController();
+    const abortImages = () => imagesController.abort();
+    parent.signal.addEventListener('abort', abortImages, { once: true });
+    try {
+      const result = await bounded(() => client.from('shopee_products').select('shop_id,item_id,image_url')
+        .in('shop_id', [...new Set(firstItems.map(row => String(row.shop_id)))])
+        .in('item_id', [...new Set(firstItems.map(row => String(row.item.item_id)))])
+        .limit(PAGE_SIZE + 1).abortSignal(imagesController.signal), imagesController, 5000);
+      return new Map((result.error ? [] : result.data || []).map(row => [`${row.shop_id}:${row.item_id}`, imageUrl(row.image_url)]));
+    } catch { return new Map(); } // A missing catalogue image must not hide the orders.
+    finally { parent.signal.removeEventListener('abort', abortImages); }
   }
 
   function cancelDetail() { detailId++; detailController?.abort(); if (initialized) el('orders-detail-body').textContent = ''; }
@@ -144,6 +226,7 @@
     controller = new AbortController();
     const current = controller;
     const id = ++requestId;
+    hideProductsPreview();
     closeDetail();
     rows = [];
     el('orders-rows').innerHTML = '';
@@ -172,7 +255,7 @@
         const ids = selectedIds();
         if (!ids.length) return { data: [], noShops: true };
         let query = client.from('shopee_orders')
-          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at,shopee_order_items(shop_id,item_name,model_name,quantity,unit_price)')
+          .select('order_sn,shop_id,status,buyer_username,total_amount,created_at,synced_at,shopee_order_items(shop_id,item_id,item_name,model_name,quantity,unit_price)')
           .in('shop_id', ids)
           .limit(ITEM_LIMIT + 1, { referencedTable: 'shopee_order_items' })
           .order('created_at', { ascending: false, nullsFirst: false })
@@ -187,7 +270,9 @@
           end.setUTCDate(end.getUTCDate() + 1);
           query = query.lt('created_at', end.toISOString());
         }
-        return await query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).abortSignal(current.signal);
+        const orders = await query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE).abortSignal(current.signal);
+        if (orders.error || id !== requestId || !visible) return orders;
+        return { ...orders, images: await productImages(client, orders.data || [], current) };
       }, current);
       if (id !== requestId || !visible || !result) return;
       if (result.error) throw new Error('Não foi possível carregar os pedidos. Verifique sua conexão e tente novamente.');
@@ -202,7 +287,7 @@
       message('');
       el('orders-results').hidden = false;
       el('orders-rows').innerHTML = rows.map((order, index) => `<tr>
-        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td><td class="orders-products">${productsCell(order)}</td>
+        <td class="orders-number">${escape(order.order_sn)}</td><td>${escape(shopName(order.shop_id))}</td><td class="orders-products">${productsCell(order, index, result.images || new Map())}</td>
         <td class="orders-date">${dateText(order.created_at)}</td><td>${badge(order.status)}</td><td>${escape(order.buyer_username || 'Não informado')}</td>
         <td class="orders-money">${amountText(order.total_amount)}</td><td class="orders-money orders-receipt">${receiptCell(estimate(order))}</td><td><button type="button" class="orders-button small" data-order-index="${index}" aria-label="Ver pedido ${escape(order.order_sn)}">Ver pedido</button></td></tr>`).join('');
       el('orders-summary-count').textContent = `${rows.length} pedidos nesta página`;
@@ -223,6 +308,7 @@
 
   async function showDetail(order) {
     if (!order) return;
+    hideProductsPreview();
     cancelDetail();
     const id = detailId;
     detailController = new AbortController();
@@ -261,7 +347,7 @@
 
   function refresh() { shops = null; page = 0; return load(); }
   function open() { visible = true; return refresh(); }
-  function leave() { visible = false; requestId++; controller?.abort(); closeDetail(); rows = []; if (initialized) { el('orders-rows').innerHTML = ''; el('orders-results').hidden = true; } }
+  function leave() { visible = false; requestId++; controller?.abort(); hideProductsPreview(); closeDetail(); rows = []; if (initialized) { el('orders-rows').innerHTML = ''; el('orders-results').hidden = true; } }
   function resetAccount() { leave(); shops = null; connectionNames = new Map(); page = 0; filters = { search: '', status: '', from: '', to: '' }; if (initialized) { el('orders-filters').reset(); el('orders-to').setCustomValidity(''); } }
   window.mavisOrders = Object.freeze({ open, refresh, leave });
   window.addEventListener('mavis:auth-expired', resetAccount);

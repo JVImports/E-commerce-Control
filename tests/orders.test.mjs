@@ -12,7 +12,7 @@ function harness({ respond, timeout = 15000, session = true } = {}) {
   const events = new Map();
   const calls = [];
   class Element {
-    constructor(id) { this.id = id; this.events = {}; this.value = ''; this.hidden = false; this.open = false; this.textContent = ''; this.html = ''; }
+    constructor(id) { this.id = id; this.events = {}; this.value = ''; this.hidden = false; this.open = false; this.textContent = ''; this.html = ''; this.style = {}; this.attributes = {}; }
     set innerHTML(value) {
       this.html = value;
       for (const match of value.matchAll(/id="([^"]+)"/g)) if (!nodes.has(match[1])) nodes.set(match[1], new Element(match[1]));
@@ -20,7 +20,9 @@ function harness({ respond, timeout = 15000, session = true } = {}) {
     get innerHTML() { return this.html; }
     addEventListener(name, fn) { (this.events[name] ||= []).push(fn); }
     fire(name, options = {}) { for (const fn of this.events[name] || []) fn({ preventDefault() {}, target: this, ...options }); }
-    setAttribute() {}
+    setAttribute(name, value) { this.attributes[name] = value; }
+    removeAttribute(name) { delete this.attributes[name]; }
+    getBoundingClientRect() { return { left: 40, top: 100, bottom: 136, width: 360, height: 220 }; }
     setCustomValidity(value) { this.validity = value; }
     reportValidity() { return !nodes.get('orders-to').validity; }
     reset() { for (const id of ['orders-search', 'orders-status', 'orders-from', 'orders-to']) nodes.get(id).value = ''; }
@@ -31,6 +33,7 @@ function harness({ respond, timeout = 15000, session = true } = {}) {
   nodes.set('select-shop', new Element('select-shop'));
   nodes.get('select-shop').value = 'all';
   const window = {
+    innerWidth: 1024, innerHeight: 768,
     addEventListener(name, fn) { events.set(name, fn); },
     supabaseClient: {
       auth: { getSession: async () => ({ data: { session: session ? {} : null } }) },
@@ -47,12 +50,56 @@ function harness({ respond, timeout = 15000, session = true } = {}) {
     }
   };
   vm.runInNewContext(commissionSource, { window });
-  vm.runInNewContext(source, { window, document: { getElementById: id => nodes.get(id) }, Intl, Date, Map, Promise, AbortController, setTimeout: (fn, ms) => setTimeout(fn, ms === 15000 ? timeout : ms), clearTimeout });
+  vm.runInNewContext(source, { window, document: { getElementById: id => nodes.get(id) }, URL, Intl, Date, Map, Promise, AbortController, setTimeout: (fn, ms) => setTimeout(fn, ms === 15000 ? timeout : ms), clearTimeout });
   const clickDetail = index => nodes.get('pedidos-view').fire('click', { target: { closest: selector => selector === '[data-order-index]' ? { dataset: { orderIndex: String(index) } } : null } });
   return { window, nodes, calls, events, clickDetail };
 }
 const order = (number, shop = 1) => ({ order_sn: number, shop_id: shop, status: 'COMPLETED', buyer_username: 'Comprador', total_amount: 10, created_at: '2026-08-11T15:00:00Z', synced_at: '2026-08-11T16:00:00Z' });
 const op = (call, name) => call.operations.filter(entry => entry[0] === name);
+
+test('product photos use one bounded catalogue read, preserve shop scope and disclose escaped item details on focus', async () => {
+  const photo = 'https://cf.shopee.com.br/file/example';
+  const unsafe = '<img src=x onerror=alert(1)>';
+  const h = harness({ respond: call => {
+    if (call.table === 'shopee_orders') return { data: [
+      { ...order('MULTI'), shopee_order_items: [{ shop_id: 1, item_id: 10, item_name: unsafe, model_name: 'Azul <grande>', quantity: 2, unit_price: 20 }, { shop_id: 1, item_id: 11, item_name: 'Segundo produto', quantity: 3, unit_price: 10 }] },
+      { ...order('PHOTO', 2), shopee_order_items: [{ shop_id: 2, item_id: 10, item_name: 'Com foto', quantity: 1, unit_price: 20 }] },
+      { ...order('UNSAFE'), shopee_order_items: [{ shop_id: 1, item_id: 12, item_name: 'Sem foto', quantity: 1, unit_price: 20 }] }
+    ] };
+    if (call.table === 'shopee_products') return { data: [{ shop_id: 2, item_id: 10, image_url: photo }, { shop_id: 1, item_id: 12, image_url: 'https://cf.shopee.com.br.evil.example/image' }] };
+  } });
+  await h.window.mavisOrders.open();
+  const reads = h.calls.filter(call => call.table === 'shopee_products');
+  assert.equal(reads.length, 1);
+  assert.deepEqual(op(reads[0], 'limit'), [['limit', 26]]);
+  assert.deepEqual(Array.from(op(reads[0], 'in')[0][2]), ['1', '2']);
+  assert.deepEqual(Array.from(op(reads[0], 'in')[1][2]), ['10', '12']);
+  const html = h.nodes.get('orders-rows').innerHTML;
+  assert.equal((html.match(/<img /g) || []).length, 1, 'a catalogue image cannot cross shops');
+  assert.match(html, /orders-product-count">\+1/);
+  assert.doesNotMatch(html, /evil\.example|onerror=alert\(1\)>/);
+  const trigger = h.nodes.get('orders-refresh');
+  trigger.dataset = { productsPreview: '0' };
+  h.nodes.get('pedidos-view').fire('focusin', { target: { closest: () => trigger } });
+  const preview = h.nodes.get('orders-products-preview');
+  assert.equal(preview.hidden, false);
+  assert.match(preview.innerHTML, /&lt;img/);
+  assert.match(preview.innerHTML, /Azul &lt;grande&gt; · Qtd: 2/);
+  assert.match(preview.innerHTML, /Segundo produto/);
+  assert.match(preview.innerHTML, /Qtd: 3/);
+  assert.equal(trigger.attributes['aria-describedby'], 'orders-products-preview');
+  h.nodes.get('pedidos-view').fire('keydown', { key: 'Escape' });
+  assert.equal(preview.hidden, true);
+  assert.equal(trigger.attributes['aria-describedby'], undefined);
+});
+
+test('an unavailable catalogue does not hide the orders or their product labels', async () => {
+  const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: [{ ...order('NO-PHOTO'), shopee_order_items: [{ shop_id: 1, item_id: 10, item_name: 'Produto sem imagem', quantity: 1, unit_price: 20 }] }] } : call.table === 'shopee_products' ? { error: { message: 'unavailable' } } : undefined });
+  await h.window.mavisOrders.open();
+  assert.equal(h.nodes.get('orders-results').hidden, false);
+  assert.match(h.nodes.get('orders-rows').innerHTML, /Produto sem imagem/);
+  assert.doesNotMatch(h.nodes.get('orders-rows').innerHTML, /<img /);
+});
 
 test('orders load only on opening, use a bounded page, and fetch the next page without recounting', async () => {
   const h = harness({ respond: call => call.table === 'shopee_orders' ? { data: Array.from({ length: 26 }, (_, i) => order(`ORDER-${i}`)) } : undefined });
@@ -140,8 +187,7 @@ test('details are bound to both shop and order, bounded, and all imported text i
   assert.match(h.nodes.get('orders-detail-body').innerHTML, /&lt;img/);
   assert.doesNotMatch(h.nodes.get('orders-detail-body').innerHTML, /<img/);
   assert.doesNotMatch(h.nodes.get('orders-rows').innerHTML, /<img/);
-  assert.match(h.nodes.get('orders-rows').innerHTML, /class="orders-product"><span>&lt;img/);
-  assert.match(h.nodes.get('orders-rows').innerHTML, /Qtd: 2/);
+  assert.match(h.nodes.get('orders-rows').innerHTML, /class="orders-product-name">&lt;img/);
   assert.doesNotMatch(h.nodes.get('orders-rows').innerHTML, /WRONG-SHOP-PRODUCT/);
   assert.match(h.nodes.get('orders-freshness').innerHTML, /Confira a sincronização/);
   h.nodes.get('orders-detail-close').fire('click'); assert.equal(h.nodes.get('orders-detail').open, false);
@@ -172,7 +218,7 @@ test('receipt estimates use item prices and quantities in the same bounded reque
   ] } : undefined });
   await h.window.mavisOrders.open();
   const query = h.calls.find(call => call.table === 'shopee_orders');
-  assert.match(op(query, 'select')[0][1], /shopee_order_items\(shop_id,item_name,model_name,quantity,unit_price\)/);
+  assert.match(op(query, 'select')[0][1], /shopee_order_items\(shop_id,item_id,item_name,model_name,quantity,unit_price\)/);
   assert.deepEqual(JSON.parse(JSON.stringify(op(query, 'limit'))), [['limit', 201, { referencedTable: 'shopee_order_items' }]]);
   assert.equal(h.calls.length, 2, 'no additional per-order requests');
   assert.match(h.nodes.get('orders-rows').innerHTML.replace(/\s/g, ''), /R\$118,98/);
