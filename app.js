@@ -21,6 +21,7 @@ let localCompletedTasks = JSON.parse(localStorage.getItem('completed_tasks') || 
 
 // DOM elements
 const views = {
+  pedidos: document.getElementById('pedidos-view'),
   dashboard: document.getElementById('dashboard-view'),
   financeiro: document.getElementById('financeiro-view'),
   estoque: document.getElementById('estoque-view'),
@@ -214,6 +215,7 @@ async function logout() {
 
 // Navigation
 function switchView(viewName, element = null) {
+  if (activeView === 'pedidos' && viewName !== 'pedidos') window.mavisOrders?.leave();
   activeView = viewName;
   
   // Hide all views
@@ -247,6 +249,11 @@ function switchView(viewName, element = null) {
   }
 
   switch(viewName) {
+    case 'pedidos':
+      viewTitle.innerText = "Pedidos";
+      viewSubtitle.innerText = "Consulte os pedidos importados de suas lojas Shopee.";
+      window.mavisOrders?.open();
+      break;
     case 'dashboard':
       viewTitle.innerText = "Dashboard Geral";
       viewSubtitle.innerText = "HUB de gestão multiloja para sellers.";
@@ -1889,7 +1896,10 @@ async function filterDataByShop(shopId) {
   const selectShopEl = document.getElementById('select-shop');
   if (selectShopEl) selectShopEl.value = shopId;
   renderMarketplaceScope();
-  
+  if (activeView === 'pedidos') {
+    await window.mavisOrders?.refresh();
+    return;
+  }
   await loadAllData();
 }
 
