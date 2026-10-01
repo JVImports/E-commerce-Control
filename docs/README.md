@@ -2,6 +2,8 @@
 
 ## Estado atual
 
+- [Sincronização econômica Shopee e renomeação de lojas](runbooks/SINCRONIZACAO_ECONOMICA_SHOPEE.md): rotina V3 vigente, pausas, cadências e ordem de publicação.
+
 - `checkpoints/`: pontos seguros para retomada da execução.
 - `shopee/`: diagnóstico técnico ainda relevante para a integração Shopee.
 - `runbooks/`: procedimentos operacionais vigentes.

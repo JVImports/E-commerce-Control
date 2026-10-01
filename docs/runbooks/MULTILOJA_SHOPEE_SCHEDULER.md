@@ -1,5 +1,7 @@
 # Scheduler multiloja Shopee
 
+> Procedimento histórico. As frequências, os limites e a publicação vigentes desde 01/10/2026 estão em [Sincronização econômica Shopee](SINCRONIZACAO_ECONOMICA_SHOPEE.md). Não reativar os jobs legados nem criar um segundo agendador.
+
 ## Objetivo
 
 Sincronizar cada conexão Shopee Live ativa sem fixar `shop_id` nos jobs. A fila é criada quando uma loja é autorizada ou reautorizada e também recebe as conexões já ativas na primeira aplicação da migration.

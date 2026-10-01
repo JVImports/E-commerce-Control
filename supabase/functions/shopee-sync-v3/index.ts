@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import { ORDER_PAGE_LIMIT, orderWindow, sameOrderVersion, shopeeFailure } from "../_shared/shopee-sync-policy.mjs";
 import {
   resolveShopeeV3Environment,
   SHOPEE_LIVE_ADS_ORIGIN,
@@ -26,6 +27,7 @@ const ADS_ORIGINS = new Set([SHOPEE_LIVE_ADS_ORIGIN, SHOPEE_SANDBOX_PARTNER_ORIG
 
 class HttpError extends Error {
   status: number;
+  code?: string;
   constructor(status: number, message: string) {
     super(message);
     this.name = "HttpError";
@@ -243,10 +245,13 @@ async function shopeeRequest<T>({ method, path, params, payload, accessToken, sh
       await sleep(1000 * attempt);
       continue;
     }
-    if (!response.ok) throw new Error(`Shopee HTTP error ${response.status}: ${await response.text()}`);
-
-    const data = await response.json();
-    if (data.error) throw new Error(`Shopee error code=${String(data.error)} message=${String(data.message ?? "")}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) {
+      const failure = shopeeFailure(String(data.error || ""), response.status);
+      const error = new HttpError(failure.status, failure.message);
+      error.code = failure.code;
+      throw error;
+    }
     return data as T;
   }
   throw new Error(`Unexpected Shopee failure on ${path}`);
@@ -427,8 +432,7 @@ async function refreshAccessToken(shop: ShopRow, credential: ShopeeCredential): 
   const refreshExpireIn = Number(response.refresh_expire_in ?? 0);
   const refreshExpireIso = refreshExpireIn > 0
     ? new Date(Date.now() + refreshExpireIn * 1000).toISOString()
-    : shop.auth_expires_at;
-  if (!refreshExpireIso) throw new Error("Invalid Shopee refresh token expiry");
+    : shop.auth_expires_at || null;
   const { error } = await supabase.rpc("rotate_shopee_authorization_tokens_v3", {
     p_authorization_id: shop.authorization_id,
     p_access_token: accessToken,
@@ -847,6 +851,70 @@ async function syncOrdersBatch(shop: ShopRow, credential: ShopeeCredential, maxM
   return { startIndex, nextIndex: reachedEnd ? Math.max(months.length - 1, 0) : index, completedHistoricalBackfill: reachedEnd, months: results, ...totals };
 }
 
+async function syncOrdersIncremental(shop: ShopRow, credential: ShopeeCredential) {
+  const accessToken = await refreshAccessToken(shop, credential);
+  const watermark = await getSyncState(shop, "orders_updated_until");
+  const saved = await getSyncState(shop, "orders_update_window");
+  let pending = null;
+  try { pending = saved ? JSON.parse(saved) : null; } catch { /* restart from the durable watermark */ }
+  let initialFrom = 0;
+  if (!watermark && !pending) {
+    const { data, error } = await supabase.from("shopee_orders").select("synced_at")
+      .eq("shop_id", shop.shop_id).order("synced_at", { ascending: false, nullsFirst: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    initialFrom = data?.synced_at ? Math.floor(new Date(data.synced_at).getTime() / 1000) : 0;
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const window = orderWindow(nowSeconds, watermark, pending, initialFrom);
+  let ordersUpserted = 0;
+  let itemsUpserted = 0;
+  let ordersChecked = 0;
+  let more = false;
+  for (let page = 0; page < ORDER_PAGE_LIMIT; page++) {
+    const params: Record<string, string | number> = { time_range_field: "update_time", time_from: window.from, time_to: window.to, page_size: 100 };
+    if (window.cursor) params.cursor = window.cursor;
+    const response = (await shopeeRequest<any>({ method: "GET", path: "/api/v2/order/get_order_list", accessToken, shopId: String(shop.shop_id), credential, params })).response ?? {};
+    if (!Array.isArray(response.order_list)) throw new Error("Shopee returned an invalid order list; checkpoint retained");
+    const sns = [...new Set<string>(normalizeArray(response.order_list).map((order: any) => String(order.order_sn || "")).filter(Boolean))];
+    if (sns.length > 100) throw new Error("Shopee order page exceeded the configured limit");
+    if (sns.length) {
+      const details = await getOrderDetails(shop, accessToken, credential, sns);
+      const received = new Set(details.map((order: any) => String(order.order_sn)));
+      if (sns.some(sn => !received.has(sn))) throw new Error("Shopee returned incomplete order details; checkpoint retained");
+      if (details.some(order => !Array.isArray(order.item_list))) throw new Error("Shopee returned incomplete order items; checkpoint retained");
+      const records = buildOrderRecords(shop, details);
+      const { data: stored, error } = await supabase.from("shopee_orders")
+        .select("order_sn,status,buyer_username,total_amount,payment_method,items_summary,shipping_address,created_at,updated_at")
+        .eq("shop_id", shop.shop_id).in("order_sn", sns).limit(100);
+      if (error) throw error;
+      const byNumber = new Map((stored ?? []).map(row => [row.order_sn, row]));
+      const changed = records.orderRows.filter(row => !sameOrderVersion(row, byNumber.get(row.order_sn)));
+      const changedNumbers = new Set(changed.map(row => row.order_sn));
+      const items = records.itemRows.filter(row => changedNumbers.has(row.order_sn));
+      if (items.length > 5000) throw new Error("Order items exceeded the configured batch limit");
+      if (changed.length) {
+        // Commit headers and their authoritative items together; failed writes never advance the cursor.
+        const { error: pageError } = await supabase.rpc("upsert_shopee_order_page", { p_connection_id: shop.connection_id, p_orders: changed, p_items: items });
+        if (pageError) throw pageError;
+        ordersUpserted += changed.length;
+        itemsUpserted += items.length;
+      }
+      ordersChecked += sns.length;
+    }
+    more = Boolean(response.more || response.has_more);
+    const cursor = String(response.next_cursor || "");
+    if (more && (!cursor || cursor === window.cursor)) throw new Error("Shopee pagination did not advance; checkpoint retained");
+    if (!more) {
+      await setSyncState(shop, "orders_updated_until", window.to);
+      await setSyncState(shop, "orders_update_window", "");
+      break;
+    }
+    window.cursor = cursor;
+    await setSyncState(shop, "orders_update_window", JSON.stringify(window));
+  }
+  return { ordersChecked, ordersUpserted, itemsUpserted, hasMore: more || window.to < nowSeconds - 60, checkedUntil: unixToIso(window.to), mode: "incremental" };
+}
+
 async function getOrdersMissingEscrow(shop: ShopRow, statuses: string[]) {
   const { data: orders, error } = await supabase
     .from("shopee_orders")
@@ -1179,7 +1247,7 @@ async function handleAction(actor: RequestActor, body: Record<string, any>, req:
   } else if (action === "sync-product-ads") {
     result = await syncProductAds(shop, credential, { days: body.days, start_date: body.start_date, end_date: body.end_date });
   } else if (action === "sync-orders-step") {
-    result = await syncOrdersBatch(shop, credential, 1);
+    result = await syncOrdersIncremental(shop, credential);
   } else if (action === "sync-orders-batch") {
     const months = Math.min(Math.max(Number(body.months ?? 3), 1), 6);
     result = await syncOrdersBatch(shop, credential, months);
@@ -1188,9 +1256,7 @@ async function handleAction(actor: RequestActor, body: Record<string, any>, req:
   } else if (action === "sync-income-overview") {
     result = await syncIncomeOverview(shop, credential);
   } else if (action === "sync-financial") {
-    const months = Math.min(Math.max(Number(body.months ?? 1), 1), 4);
     result = {
-      orders: await syncOrdersBatch(shop, credential, months),
       escrow: await syncEscrowStep(shop, credential, Number(body.batch_size ?? 50)),
       incomeOverview: await syncIncomeOverview(shop, credential).catch((error) => ({ skipped: true, message: error instanceof Error ? error.message : String(error) }))
     };
@@ -1227,6 +1293,12 @@ Deno.serve(async (req) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const status = error instanceof HttpError ? error.status : 500;
-    return jsonResponse(req, { ok: false, error: status === 500 ? "Falha na sincronização Shopee." : message }, status);
+    const code = error instanceof HttpError ? error.code : undefined;
+    if (code && body.connection_id && body.account_id) {
+      // Only handle credentials for the already-authorized action; never log tokens or raw API bodies.
+      await supabase.from("shopee_connections").update({ last_error: message, ...(code === "reauthorization_required" ? { status: "reauthorization_required" } : {}) })
+        .eq("id", body.connection_id).eq("account_id", body.account_id);
+    }
+    return jsonResponse(req, { ok: false, code: code || "sync_failed", error: status === 500 ? "Falha na sincronização Shopee." : message }, status);
   }
 });

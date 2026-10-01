@@ -134,13 +134,17 @@ async function bootstrap(userId: string) {
     await Promise.all([
       supabase.from("accounts").select("id,name,status").in("id", accountIds),
       supabase.from("shopee_connections")
-        .select("id,account_id,environment,external_shop_id,shop_name,region,status,authorized_at,last_sync_at,last_error,updated_at")
+        .select("id,account_id,environment,external_shop_id,shop_name,metadata,region,status,authorized_at,last_sync_at,last_error,updated_at")
         .in("account_id", accountIds)
         .eq("environment", SHOPEE_ENVIRONMENT.environment)
         .order("updated_at", { ascending: false })
     ]);
   if (accountError) throw accountError;
   if (connectionError) throw connectionError;
+  const { data: schedules, error: scheduleError } = await supabase.from("shopee_sync_schedules")
+    .select("connection_id,action,enabled,cadence_minutes,last_finished_at,last_status,last_error,next_run_at")
+    .in("account_id", accountIds);
+  if (scheduleError) throw scheduleError;
 
   const roleByAccount = new Map(memberships.map((row) => [String(row.account_id), row.role]));
   return {
@@ -151,7 +155,11 @@ async function bootstrap(userId: string) {
       ...account,
       role: roleByAccount.get(String(account.id))
     })),
-    connections: connections ?? []
+    connections: (connections ?? []).map(({ metadata, ...connection }) => ({
+      ...connection,
+      display_name: metadata?.display_name || connection.shop_name,
+      sync_schedules: (schedules ?? []).filter((schedule) => schedule.connection_id === connection.id)
+    }))
   };
 }
 
@@ -193,6 +201,37 @@ async function startAuthorization(userId: string, body: Record<string, unknown>)
   };
 }
 
+async function renameConnection(userId: string, body: Record<string, unknown>) {
+  const membership = await resolveMembership(userId, body.account_id, true);
+  const name = String(body.display_name ?? "").trim();
+  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name)) throw new HttpError(400, "Informe um nome de 1 a 80 caracteres.");
+  const { data: connection, error } = await supabase.from("shopee_connections")
+    .select("id,metadata").eq("id", String(body.connection_id || ""))
+    .eq("account_id", membership.account_id).eq("environment", SHOPEE_ENVIRONMENT.environment).maybeSingle();
+  if (error) throw error;
+  if (!connection) throw new HttpError(404, "Conexão Shopee não encontrada.");
+  const { error: updateError } = await supabase.from("shopee_connections")
+    .update({ metadata: { ...connection.metadata, display_name: name }, updated_at: new Date().toISOString() })
+    .eq("id", connection.id).eq("account_id", membership.account_id);
+  if (updateError) throw updateError;
+  return { ok: true, display_name: name };
+}
+
+async function resumeSync(userId: string, body: Record<string, unknown>) {
+  const membership = await resolveMembership(userId, body.account_id, true);
+  const { data: connection, error } = await supabase.from("shopee_connections")
+    .select("id,status").eq("id", String(body.connection_id || ""))
+    .eq("account_id", membership.account_id).eq("environment", SHOPEE_ENVIRONMENT.environment).maybeSingle();
+  if (error) throw error;
+  if (!connection) throw new HttpError(404, "Conexão Shopee não encontrada.");
+  if (connection.status !== "active") throw new HttpError(409, "Reautorize a loja antes de retomar a sincronização.");
+  const { error: updateError } = await supabase.from("shopee_sync_schedules")
+    .update({ enabled: true, status: "pending", attempts: 0, last_error: null, next_run_at: new Date().toISOString(), lease_expires_at: null })
+    .eq("connection_id", connection.id).eq("account_id", membership.account_id).eq("enabled", false);
+  if (updateError) throw updateError;
+  return { ok: true };
+}
+
 async function disconnect(userId: string, body: Record<string, unknown>) {
   const membership = await resolveMembership(userId, body.account_id, true);
   const connectionId = String(body.connection_id || "");
@@ -223,6 +262,8 @@ Deno.serve(async (req) => {
 
     if (action === "bootstrap") return json(req, { ok: true, ...(await bootstrap(user.id)) });
     if (action === "start") return json(req, await startAuthorization(user.id, body));
+    if (action === "rename") return json(req, await renameConnection(user.id, body));
+    if (action === "resume-sync") return json(req, await resumeSync(user.id, body));
     if (action === "disconnect") return json(req, await disconnect(user.id, body));
     throw new HttpError(400, "Ação não suportada.");
   } catch (error) {

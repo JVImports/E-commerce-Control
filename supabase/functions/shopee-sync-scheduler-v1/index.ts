@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2.106.2";
+import { DAILY_SYNC_LIMIT, STORAGE_STOP_BYTES, syncFailure } from "../_shared/shopee-sync-policy.mjs";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -26,6 +27,9 @@ type Schedule = {
   initial_pending: boolean;
   attempts: number;
 };
+class SyncError extends Error {
+  constructor(message: string, public code = "sync_failed") { super(message); }
+}
 
 async function getShopId(connectionId: string) {
   const { data, error } = await admin
@@ -65,7 +69,10 @@ async function nextDueSchedule() {
   const dueFilter = `and(status.eq.pending,next_run_at.lte.${now}),and(status.eq.running,lease_expires_at.lt.${now})`;
   const { data: candidates, error } = await admin
     .from("shopee_sync_schedules")
-    .select("id,account_id,connection_id,action,initial_action,initial_payload,payload,cadence_minutes,priority,initial_pending,attempts")
+    .select("id,account_id,connection_id,action,initial_action,initial_payload,payload,cadence_minutes,priority,initial_pending,attempts,connection:shopee_connections!inner(status,environment)")
+    .eq("enabled", true)
+    .eq("connection.status", "active")
+    .eq("connection.environment", "live")
     .or(dueFilter)
     .order("priority", { ascending: false })
     .order("next_run_at", { ascending: true })
@@ -83,6 +90,7 @@ async function nextDueSchedule() {
       updated_at: now
     })
     .eq("id", candidate.id)
+    .eq("enabled", true)
     .or(dueFilter)
     .select("id,account_id,connection_id,action,initial_action,initial_payload,payload,cadence_minutes,priority,initial_pending,attempts")
     .maybeSingle();
@@ -109,7 +117,7 @@ async function callSync(schedule: Schedule) {
     signal: AbortSignal.timeout(120_000)
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.ok === false) throw new Error(body.error || `sync_http_${response.status}`);
+  if (!response.ok || body.ok === false) throw new SyncError(body.error || `sync_http_${response.status}`, body.code || "sync_failed");
   return { action, result: body.result ?? null };
 }
 
@@ -121,7 +129,7 @@ async function finish(schedule: Schedule, runId: string, outcome: { action: stri
       status: "pending",
       initial_pending: false,
       attempts: 0,
-      next_run_at: afterMinutes(schedule.cadence_minutes),
+      next_run_at: afterMinutes((outcome.result as any)?.hasMore ? 5 : schedule.cadence_minutes),
       lease_expires_at: null,
       last_finished_at: finishedAt,
       last_status: "success",
@@ -141,11 +149,13 @@ async function fail(schedule: Schedule, runId: string, error: unknown) {
   const finishedAt = nowIso();
   const message = sanitizedError(error);
   const attempts = schedule.attempts + 1;
-  const retryMinutes = Math.min(5 * 2 ** Math.min(attempts - 1, 5), 120);
+  const code = error instanceof SyncError ? error.code : "sync_failed";
+  const { retryMinutes, pause } = syncFailure(code, attempts);
   const { error: scheduleError } = await admin
     .from("shopee_sync_schedules")
     .update({
       status: "pending",
+      enabled: !pause,
       attempts,
       next_run_at: afterMinutes(retryMinutes),
       lease_expires_at: null,
@@ -156,11 +166,43 @@ async function fail(schedule: Schedule, runId: string, error: unknown) {
     })
     .eq("id", schedule.id);
   if (scheduleError) throw scheduleError;
+  if (code === "partner_key_expired") {
+    const { error: pauseError } = await admin.from("shopee_sync_schedules")
+      .update({ enabled: false, last_status: "error", last_error: message, updated_at: finishedAt })
+      .eq("account_id", schedule.account_id);
+    if (pauseError) throw pauseError;
+  }
   const { error: runError } = await admin
     .from("sync_runs")
     .update({ status: "error", finished_at: finishedAt, error_message: message })
     .eq("id", runId);
   if (runError) throw runError;
+}
+
+async function budgetAllows(schedule: Schedule) {
+  const day = new Date();
+  day.setUTCHours(0, 0, 0, 0);
+  const [{ data: bytes, error: storageError }, { count, error: countError }] = await Promise.all([
+    admin.rpc("shopee_sync_storage_bytes"),
+    admin.from("sync_runs").select("id", { count: "exact", head: true })
+      .eq("account_id", schedule.account_id).gte("started_at", day.toISOString())
+  ]);
+  if (storageError || countError) throw storageError || countError;
+  if (!Number.isFinite(Number(bytes)) || bytes === null) throw new Error("Storage budget unavailable");
+  const full = Number(bytes) >= STORAGE_STOP_BYTES;
+  const daily = Number(count || 0) >= DAILY_SYNC_LIMIT;
+  if (!full && !daily) return true;
+  day.setUTCDate(day.getUTCDate() + 1);
+  const message = full ? "Sincronização pausada: o banco atingiu o limite preventivo de 450 MB. Revise o armazenamento antes de retomar."
+    : "Limite preventivo de sincronizações diárias atingido. A próxima tentativa ocorrerá amanhã.";
+  let update = admin.from("shopee_sync_schedules").update({
+    enabled: !full, status: "pending", lease_expires_at: null, next_run_at: day.toISOString(),
+    last_status: "error", last_error: message, updated_at: nowIso()
+  }).eq("account_id", schedule.account_id);
+  if (!full) update = update.eq("id", schedule.id);
+  const { error } = await update;
+  if (error) throw error;
+  return false;
 }
 
 Deno.serve(async (req) => {
@@ -169,6 +211,7 @@ Deno.serve(async (req) => {
   try {
     const schedule = await nextDueSchedule();
     if (!schedule) return json({ ok: true, processed: false });
+    if (!await budgetAllows(schedule)) return json({ ok: true, processed: false, budget_limited: true });
     const shopId = await getShopId(schedule.connection_id);
 
     const { data: run, error: runError } = await admin

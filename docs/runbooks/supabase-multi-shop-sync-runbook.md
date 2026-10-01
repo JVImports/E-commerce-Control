@@ -1,5 +1,7 @@
 # Runbook: Shopee multi-shop orders and financial sync
 
+> Historical V2 rollout. Use [Sincronização econômica Shopee](SINCRONIZACAO_ECONOMICA_SHOPEE.md) for the current V3 deployment and scheduling policy.
+
 This runbook documents the safe rollout order for enabling orders/financial sync for additional Shopee stores.
 
 ## Scope

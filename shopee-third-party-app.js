@@ -14,11 +14,13 @@
     busy: '',
     error: '',
     notice: '',
-    catalogOpen: false
+    catalogOpen: false,
+    editingConnectionId: null
   };
   var SYNC_LABELS = {
     'sync-catalog': 'Catálogo',
     'sync-orders-batch': 'Pedidos',
+    'sync-orders-step': 'Pedidos',
     'sync-financial': 'Financeiro'
   };
 
@@ -47,12 +49,12 @@
     }[status] || 'Em acompanhamento';
   }
   function connectionName(connection, connections) {
-    var base = String(connection.shop_name || '').trim();
+    var base = String(connection.display_name || connection.shop_name || '').trim();
     var generic = !base || /^loja principal$/i.test(base) || /^loja conectada$/i.test(base);
     var duplicate = base && (connections || []).filter(function (item) {
-      return String(item.shop_name || '').trim().toLowerCase() === base.toLowerCase();
+      return String(item.display_name || item.shop_name || '').trim().toLowerCase() === base.toLowerCase();
     }).length > 1;
-    return generic || duplicate ? 'Shopee · Loja ' + connection.external_shop_id : base;
+    return duplicate ? base + ' · ' + connection.external_shop_id : generic ? 'Shopee · Loja ' + connection.external_shop_id : base;
   }
   function shopForConnection(integration, connection) {
     return (integration.shops || []).find(function (shop) {
@@ -128,11 +130,14 @@
     var shop = shopForConnection(integration, connection);
     var name = connectionName(connection, state.oauth.connections);
     var active = connection.status === 'active';
-    var pending = connection.status === 'legacy_pending_reauth';
+    var pending = ['legacy_pending_reauth', 'reauthorization_required'].includes(connection.status);
+    var schedules = connection.sync_schedules || [];
+    var paused = schedules.some(function (schedule) { return !schedule.enabled; });
+    var orderSchedule = schedules.find(function (schedule) { return schedule.action === 'sync-orders-step'; });
     var records = shopRecordCount(shop);
     var description = active && !connection.last_sync_at ?
       'Pronta para a primeira sincronização. Escolha um módulo abaixo para importar os dados desta loja.' :
-      active ? 'Conexão OAuth ativa. Catálogo, pedidos e financeiro atualizam automaticamente; Ads entra por relatório.' :
+      active ? (paused ? 'A sincronização automática está pausada. Corrija o motivo abaixo antes de retomar.' : 'Conexão OAuth ativa. Pedidos atualizam em ciclos de 30 minutos; Ads entra por relatório.') :
       pending ?
         'Dados históricos preservados. Reautorize esta loja para voltar a atualizar.' :
         'Esta conexão não está atualizando dados no momento.';
@@ -140,7 +145,7 @@
     if (manager() && active) {
       actions = '<div class="mavis-action-row">' +
         button('Catálogo', 'sync', { connectionId: connection.id, syncAction: 'sync-catalog', secondary: true }) +
-        button('Pedidos', 'sync', { connectionId: connection.id, syncAction: 'sync-orders-batch', secondary: true }) +
+        button('Pedidos', 'sync', { connectionId: connection.id, syncAction: 'sync-orders-step', secondary: true }) +
         button('Financeiro', 'sync', { connectionId: connection.id, syncAction: 'sync-financial', secondary: true }) +
         button('Importar relatório Ads', 'open-ads-import', { secondary: true }) +
         button('Desconectar', 'disconnect', { connectionId: connection.id, secondary: true, danger: true }) +
@@ -150,15 +155,27 @@
         button('Reautorizar pela Shopee', 'connect', { disabled: !state.oauth.configured }) +
         '</div>';
     }
+    if (manager()) actions += '<div class="mavis-action-row mavis-store-management">' +
+      button('Renomear loja', 'rename', { connectionId: connection.id, secondary: true }) +
+      (paused && active ? button('Retomar sincronização', 'resume-sync', { connectionId: connection.id, secondary: true }) : '') + '</div>';
+    var rename = state.editingConnectionId === connection.id ? '<form class="mavis-rename-form" data-rename-connection="' + escapeHtml(connection.id) + '">' +
+      '<label>Nome da loja no Mavix Hub<input name="display_name" value="' + escapeHtml(connection.display_name || connection.shop_name) + '" maxlength="80" required autocomplete="off"></label>' +
+      '<p>Este nome será usado no seletor de lojas e nos pedidos.</p><div class="mavis-action-row"><button type="submit" class="mavis-action-primary"' + (state.busy ? ' disabled' : '') + '>Salvar nome</button>' +
+      button('Cancelar', 'cancel-rename', { secondary: true }) + '</div></form>' : '';
+    var syncInfo = orderSchedule ? '<p class="mavis-sync-info">Pedidos: a cada ' + escapeHtml(orderSchedule.cadence_minutes) + ' minutos · Última verificação: ' +
+      escapeHtml(dateLabel(orderSchedule.last_finished_at)) + ' · ' + escapeHtml(orderSchedule.last_status === 'success' ? 'concluída' : orderSchedule.last_status === 'error' ? 'com falha' : 'aguardando') +
+      (orderSchedule.enabled ? ' · Próxima tentativa: ' + escapeHtml(dateLabel(orderSchedule.next_run_at)) : ' · pausada') + '</p>' : '';
+    var syncError = schedules.find(function (schedule) { return schedule.last_error; });
+    if (syncError) syncInfo += '<p class="mavis-sync-error" role="status">' + escapeHtml(syncError.last_error) + '</p>';
     return '<section class="mavis-store-row is-' + escapeHtml(connection.status) + '">' +
       '<div class="mavis-store-icon">S</div><div class="mavis-store-body"><div class="mavis-store-title">' +
       '<div><strong>' + escapeHtml(name) + '</strong><span>ID Shopee ' + escapeHtml(connection.external_shop_id) + '</span></div>' +
-      '<span class="mavis-status is-' + escapeHtml(active ? 'active' : pending ? 'warning' : connection.status) + '">' +
-      escapeHtml(statusLabel(connection.status)) + '</span></div>' +
+      '<span class="mavis-status is-' + escapeHtml(paused || pending ? 'warning' : active ? 'active' : connection.status) + '">' +
+      escapeHtml(paused ? 'Sincronização pausada' : pending ? 'Reautorização necessária' : statusLabel(connection.status)) + '</span></div>' +
       '<p>' + escapeHtml(description) + '</p><div class="mavis-store-meta"><span>' +
       escapeHtml(String(records)) + ' registros nos módulos</span><span>Última atualização: ' +
       escapeHtml(dateLabel(connection.last_sync_at || (shop && shop.last_sync_at))) + '</span></div>' +
-      actions + '</div></section>';
+      syncInfo + actions + rename + '</div></section>';
   }
   function controlsMarkup(integration) {
     if (!manager()) return '<p class="mavis-readonly-note">Seu perfil possui acesso somente leitura.</p>';
@@ -285,6 +302,12 @@
     var button = event.target.closest('[data-mavis-action]');
     if (!button || state.busy) return;
     var action = button.getAttribute('data-mavis-action');
+    if (action === 'rename' || action === 'cancel-rename') {
+      state.editingConnectionId = action === 'rename' ? button.getAttribute('data-connection-id') : null;
+      render();
+      if (state.editingConnectionId) byId('shopee-sync-view').querySelector('.mavis-rename-form input')?.focus();
+      return;
+    }
     if (action === 'toggle-catalog') {
       state.catalogOpen = !state.catalogOpen;
       render();
@@ -303,6 +326,10 @@
       if (action === 'connect') return await connectShopee();
       if (action === 'sync') await runSync(button);
       if (action === 'disconnect') await disconnect(button);
+      if (action === 'resume-sync') {
+        await invoke(FUNCTIONS.oauth, { action: 'resume-sync', account_id: state.account.id, connection_id: button.getAttribute('data-connection-id') });
+        state.notice = 'Sincronização retomada. O próximo ciclo vai verificar esta loja.';
+      }
       await refresh();
     } catch (error) {
       state.error = error.message;
@@ -319,6 +346,21 @@
       '<span id="mavis-integrations-account"></span>' + button('Adicionar canal', 'toggle-catalog', { secondary: true }) +
       '</div></div><div id="mavis-integrations-content"></div></section>';
     view.addEventListener('click', onClick);
+    view.addEventListener('submit', async function (event) {
+      var form = event.target.closest('[data-rename-connection]');
+      if (!form) return;
+      event.preventDefault();
+      if (state.busy || !form.reportValidity()) return;
+      var payload = { action: 'rename', account_id: state.account.id, connection_id: form.getAttribute('data-rename-connection'), display_name: form.elements.display_name.value.trim() };
+      state.busy = 'rename'; state.error = ''; render();
+      try {
+        await invoke(FUNCTIONS.oauth, payload);
+        state.editingConnectionId = null;
+        state.notice = 'Nome da loja atualizado.';
+        await refresh();
+      } catch (error) { state.error = error.message; }
+      finally { state.busy = ''; render(); }
+    });
     readCallback();
     window.addEventListener('mavis:auth-restored', refresh);
     window.addEventListener('mavis:auth-changed', refresh);

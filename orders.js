@@ -32,9 +32,10 @@
   let detailController = null;
   let filters = { search: '', status: '', from: '', to: '' };
   const el = (id) => document.getElementById(id);
-  const shopName = (shopId) => connectionNames.get(String(shopId))
-    || window.mavisIntegrations?.state?.oauth?.connections?.find((connection) => String(connection.external_shop_id) === String(shopId))?.shop_name
-    || shops?.get(String(shopId)) || String(shopId);
+  const shopName = (shopId) => {
+    const connection = window.mavisIntegrations?.state?.oauth?.connections?.find((item) => String(item.external_shop_id) === String(shopId));
+    return connectionNames.get(String(shopId)) || connection?.display_name || connection?.shop_name || shops?.get(String(shopId)) || String(shopId);
+  };
 
   // The deadline also covers auth refresh, which can otherwise wait indefinitely.
   async function bounded(work, signalController) {
